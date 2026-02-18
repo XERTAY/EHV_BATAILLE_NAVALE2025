@@ -1,0 +1,21 @@
+{
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "../src/index.html",
+    "distDir": "../src"
+  },
+  "package": {
+    "productName": "Bataille Navale",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "windows": [
+      {
+        "title": "Bataille Navale",
+        "width": 1200,
+        "height": 800
+      }
+    ]
+  }
+}
