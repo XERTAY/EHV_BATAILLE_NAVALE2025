@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public class Game {
 
-    private final String id;
+    private final id id;
     private final int gridSize;
     private GameState state;
     private final Random random;
@@ -20,7 +20,7 @@ public class Game {
         if (players == null || players.size() < 2) {
             throw new IllegalArgumentException("Il faut au moins 2 joueurs");
         }
-        this.id = UUID.randomUUID().toString();
+        this.id = UUID.randomUUID();
         this.gridSize = gridSize;
         this.state = GameState.SETUP;
         this.players = new ArrayList<>(players);
@@ -28,7 +28,7 @@ public class Game {
         this.random = new Random();
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 

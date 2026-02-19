@@ -6,14 +6,14 @@ import java.util.List;
 
 public class Ship {
 
-    private final String id;
+    private final int id;
     private final String name;
     private final int size;
     private final List<Coordinate> coordinates;
     private final ShipOrientation orientation;
     private boolean sunk;
 
-    public Ship(String id, String name, int size, List<Coordinate> coordinates, ShipOrientation orientation) {
+    public Ship(int id, String name, int size, List<Coordinate> coordinates, ShipOrientation orientation) {
         this.id = id;
         this.name = name;
         this.size = size;
@@ -22,7 +22,7 @@ public class Ship {
         this.sunk = false;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 

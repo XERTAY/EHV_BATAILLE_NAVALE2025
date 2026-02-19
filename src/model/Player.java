@@ -18,7 +18,7 @@ public class Player {
 
     // Constructeur pour joueur IA
     public Player(String name, int gridSize, AI ai) {
-        this.id = UUID.randomUUID().toString();
+        this.id = UUID.randomUUID();
         this.name = name;
         this.grid = new Grid(gridSize);
         this.fleet = new Fleet();
@@ -26,7 +26,7 @@ public class Player {
         this.ai = ai;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
