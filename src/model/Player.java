@@ -4,7 +4,7 @@ import java.util.UUID;
 
 public class Player {
 
-    private final String id;
+    private final int id;
     private final String name;
     private final Grid grid;
     private final Fleet fleet;
