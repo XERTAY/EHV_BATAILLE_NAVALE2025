@@ -4,8 +4,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Player {
 
-    private static final AtomicInteger idCounter = new AtomicInteger(1);
-
     private final int id;
     private final String name;
     private final Grid grid;
@@ -20,7 +18,7 @@ public class Player {
 
     // Constructeur pour joueur IA
     public Player(String name, int gridSize, AI ai) {
-        this.id = idCounter.getAndIncrement();
+        this.id = UUID.randomUUID();
         this.name = name;
         this.grid = new Grid(gridSize);
         this.fleet = new Fleet();

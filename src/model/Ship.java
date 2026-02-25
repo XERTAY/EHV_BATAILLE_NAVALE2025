@@ -7,8 +7,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Ship {
 
-    private static final AtomicInteger idCounter = new AtomicInteger(1);
-
     private final int id;
     private final String name;
     private final int size;
@@ -23,11 +21,6 @@ public class Ship {
         this.coordinates = new ArrayList<>(coordinates);
         this.orientation = orientation;
         this.sunk = false;
-    }
-
-    // Génère un ID unique pour un nouveau navire
-    public static int generateId() {
-        return idCounter.getAndIncrement();
     }
 
     public int getId() {

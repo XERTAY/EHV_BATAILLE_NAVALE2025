@@ -8,9 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Game {
 
-    private static final AtomicInteger idCounter = new AtomicInteger(1);
-
-    private final int id;
+    private final id id;
     private final int gridSize;
     private GameState state;
     private final Random random;
@@ -22,7 +20,7 @@ public class Game {
         if (players == null || players.size() < 2) {
             throw new IllegalArgumentException("Il faut au moins 2 joueurs");
         }
-        this.id = idCounter.getAndIncrement();
+        this.id = UUID.randomUUID();
         this.gridSize = gridSize;
         this.state = GameState.SETUP;
         this.players = new ArrayList<>(players);
