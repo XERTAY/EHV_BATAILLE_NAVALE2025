@@ -1,5 +1,7 @@
 package com.ehv.battleship.model;
 
+import java.util.List;
+
 public class Player {
 
     private static int nextId = 1;
@@ -12,15 +14,29 @@ public class Player {
 
     // Constructeur pour joueur humain
     public Player(String name, int gridSize) {
-        this(name, gridSize, null);
+        this(name, gridSize, null, null);
+    }
+
+    // Constructeur pour joueur humain avec flotte personnalisée
+    public Player(String name, int gridSize, List<Integer> fleetShipSizes) {
+        this(name, gridSize, null, fleetShipSizes);
     }
 
     // Constructeur pour joueur IA
     public Player(String name, int gridSize, AI ai) {
+        this(name, gridSize, ai, null);
+    }
+
+    // Constructeur complet (IA optionnelle + flotte personnalisée)
+    public Player(String name, int gridSize, AI ai, List<Integer> fleetShipSizes) {
         this.id = nextId++;
         this.name = name;
         this.grid = new Grid(gridSize);
-        this.fleet = new Fleet();
+        if (fleetShipSizes == null) {
+            this.fleet = new Fleet();
+        } else {
+            this.fleet = new Fleet(fleetShipSizes);
+        }
         this.ready = false;
         this.ai = ai;
     }

@@ -1,12 +1,32 @@
 package com.ehv.battleship.model;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 public class Fleet {
 
     private final List<Ship> ships = new ArrayList<>();
+    private final List<Integer> requiredSizes;
+
+    public Fleet() {
+        this(Arrays.asList(5, 4, 3, 3, 2));
+    }
+
+    public Fleet(List<Integer> requiredSizes) {
+        if (requiredSizes == null || requiredSizes.isEmpty()) {
+            throw new IllegalArgumentException("La flotte doit contenir au moins un navire");
+        }
+
+        this.requiredSizes = new ArrayList<>();
+        for (Integer size : requiredSizes) {
+            if (size == null || size <= 0) {
+                throw new IllegalArgumentException("Chaque taille de navire doit être un entier positif");
+            }
+            this.requiredSizes.add(size);
+        }
+    }
 
     public List<Ship> getShips() {
         return Collections.unmodifiableList(ships);
@@ -16,9 +36,12 @@ public class Fleet {
         ships.add(ship);
     }
 
-    // Flotte standard : 5, 4, 3, 3, 2 cases
+    public List<Integer> getRequiredSizes() {
+        return Collections.unmodifiableList(requiredSizes);
+    }
+
+    // Flotte requise configurable
     public boolean isComplete() {
-        int[] requiredSizes = {5, 4, 3, 3, 2};
         List<Integer> shipSizes = new ArrayList<>();
         
         for (Ship ship : ships) {
