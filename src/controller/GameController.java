@@ -52,6 +52,14 @@ public class GameController {
         return game.shoot(current, target, coordinate);
     }
 
+    public boolean isGameFinished() {
+        return game.isFinished() || game.getState() == GameState.FINISHED;
+    }
+
+    public Player getWinner() {
+        return game.getWinner();
+    }
+
     public void endTurn() {
         game.switchTurn();
     }

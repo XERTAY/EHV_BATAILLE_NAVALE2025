@@ -69,6 +69,17 @@ public class ConsoleMain {
         System.out.println("Entrez des coordonnées 'x y' (1-" + configuredGridSize + ") ou 'q' pour quitter.");
 
         while (true) {
+            if (controller.isGameFinished()) {
+                Player winner = controller.getWinner();
+                System.out.println("\n=== FIN DE PARTIE ===");
+                if (winner != null) {
+                    System.out.println("Vainqueur : " + winner.getName());
+                } else {
+                    System.out.println("Aucun vainqueur.");
+                }
+                break;
+            }
+
             Player current = controller.getCurrentPlayer();
             Player target = controller.getTargetPlayer();
 
@@ -111,7 +122,7 @@ public class ConsoleMain {
 
             switch (result) {
                 case HIT:
-                    System.out.println("HIT (TOUCHÉ) !");
+                    System.out.println("HIT (TOUCHÉ) ! Vous rejouez.");
                     break;
                 case MISS:
                     System.out.println("MISS (MANQUÉ).");
@@ -133,7 +144,20 @@ public class ConsoleMain {
             System.out.println("Grille de tir mise à jour :");
             System.out.println(renderer.renderTargetGrid(target.getGrid()));
 
-            controller.endTurn();
+            if (controller.isGameFinished()) {
+                Player winner = controller.getWinner();
+                System.out.println("\n=== FIN DE PARTIE ===");
+                if (winner != null) {
+                    System.out.println("Vainqueur : " + winner.getName());
+                } else {
+                    System.out.println("Aucun vainqueur.");
+                }
+                break;
+            }
+
+            if (result == ShotResult.MISS) {
+                controller.endTurn();
+            }
             System.out.println();
             System.out.println("§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§-\\|/-§");
         }

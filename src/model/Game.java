@@ -78,6 +78,12 @@ public class Game {
         currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
     }
 
+    private void updateFinishedState() {
+        if (state == GameState.PLAYING && isFinished()) {
+            state = GameState.FINISHED;
+        }
+    }
+
     public boolean isFinished() {
         if (state != GameState.PLAYING) {
             return state == GameState.FINISHED;
@@ -104,6 +110,13 @@ public class Game {
         if (attacker == null || defender == null) {
             throw new IllegalArgumentException("Les joueurs ne peuvent pas être nuls");
         }
+        if (state == GameState.FINISHED || isFinished()) {
+            state = GameState.FINISHED;
+            throw new IllegalStateException("La partie est terminée");
+        }
+        if (state != GameState.PLAYING) {
+            throw new IllegalStateException("La partie n'est pas en cours");
+        }
         if (!coordinate.isValid(gridSize)) {
             throw new IllegalArgumentException("Coordonnée invalide : " + coordinate);
         }
@@ -127,10 +140,13 @@ public class Game {
                 }
             }
 
+            updateFinishedState();
+
             return ShotResult.HIT;
         }
 
         defender.getGrid().setCell(coordinate, CellStatus.MISS);
+        updateFinishedState();
         return ShotResult.MISS;
     }
 
