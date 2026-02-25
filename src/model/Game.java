@@ -3,7 +3,6 @@ package com.ehv.battleship.model;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 
 public class Game {
 
@@ -11,7 +10,6 @@ public class Game {
     private final int id;
     private final int gridSize;
     private GameState state;
-    private final Random random;
 
     private final List<Player> players;
     private int currentPlayerIndex;
@@ -25,7 +23,6 @@ public class Game {
         this.state = GameState.SETUP;
         this.players = new ArrayList<>(players);
         this.currentPlayerIndex = 0;
-        this.random = new Random();
     }
 
     public int getId() {
@@ -119,14 +116,41 @@ public class Game {
             return ShotResult.ALREADY_MISS;
         }
 
-        boolean isHit = random.nextBoolean();
-        if (isHit) {
+        if (currentStatus == CellStatus.SHIP) {
             defender.getGrid().setCell(coordinate, CellStatus.HIT);
+
+            Ship touchedShip = findShipAtCoordinate(defender, coordinate);
+            if (touchedShip != null && isShipCompletelyHit(defender, touchedShip)) {
+                touchedShip.setSunk(true);
+                for (Coordinate shipCoordinate : touchedShip.getCoordinates()) {
+                    defender.getGrid().setCell(shipCoordinate, CellStatus.SUNK);
+                }
+            }
+
             return ShotResult.HIT;
-        } else {
-            defender.getGrid().setCell(coordinate, CellStatus.MISS);
-            return ShotResult.MISS;
         }
+
+        defender.getGrid().setCell(coordinate, CellStatus.MISS);
+        return ShotResult.MISS;
+    }
+
+    private Ship findShipAtCoordinate(Player player, Coordinate coordinate) {
+        for (Ship ship : player.getFleet().getShips()) {
+            if (ship.getCoordinates().contains(coordinate)) {
+                return ship;
+            }
+        }
+        return null;
+    }
+
+    private boolean isShipCompletelyHit(Player player, Ship ship) {
+        for (Coordinate shipCoordinate : ship.getCoordinates()) {
+            CellStatus status = player.getGrid().getCell(shipCoordinate);
+            if (status != CellStatus.HIT && status != CellStatus.SUNK) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Place un navire pour un joueur avec validation complète

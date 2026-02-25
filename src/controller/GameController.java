@@ -72,6 +72,12 @@ public class GameController {
         int shipId = Ship.generateId(); // Note: ID unique pour chaque navire
         Ship ship = new Ship(shipId, shipName, size, coordinates, orientation);
         game.placeShip(current, ship);
+        
+        if (game.getState() == GameState.PLACEMENT
+                && current.getFleet().isComplete()
+                && !areAllFleetsReady()) {
+            game.switchTurn();
+        }
     }
 
     // Vérifie si un placement est valide avant de le faire
