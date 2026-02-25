@@ -1,5 +1,8 @@
 package com.ehv.battleship.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class Grid {
 
     private final int size;
@@ -87,6 +90,102 @@ public class Grid {
 
     public boolean isValidCoordinate(Coordinate coordinate) {
         return coordinate.isValid(size);
+    }
+
+    /**
+     * Vérifie si un navire peut être placé à partir d'une coordonnée
+     * @param startCoordinate Coordonnée de départ
+     * @param size Taille du navire
+     * @param orientation Orientation du navire
+     * @return true si le placement est valide, false sinon
+     */
+    public boolean canPlaceShip(Coordinate startCoordinate, int size, ShipOrientation orientation) {
+        if (!isValidCoordinate(startCoordinate)) {
+            return false;
+        }
+        
+        // Calculer toutes les coordonnées que le navire occuperait
+        for (int i = 0; i < size; i++) {
+            Coordinate coord;
+            switch (orientation) {
+                case HORIZONTAL:
+                    coord = startCoordinate.add(i, 0);
+                    break;
+                case HORIZONTAL_LEFT:
+                    coord = startCoordinate.add(-i, 0);
+                    break;
+                case VERTICAL:
+                    coord = startCoordinate.add(0, i);
+                    break;
+                case VERTICAL_UP:
+                    coord = startCoordinate.add(0, -i);
+                    break;
+                default:
+                    return false;
+            }
+            
+            // Vérifier que la coordonnée est valide
+            if (!isValidCoordinate(coord)) {
+                return false;
+            }
+            
+            // Vérifier que la cellule n'est pas déjà occupée par un navire
+            if (getCell(coord) == CellStatus.SHIP) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * Place un navire sur la grille
+     * @param ship Le navire à placer
+     * @throws IllegalArgumentException si le placement n'est pas valide
+     */
+    public void placeShip(Ship ship) {
+        List<Coordinate> coordinates = ship.getCoordinates();
+        for (Coordinate coord : coordinates) {
+            if (!isValidCoordinate(coord)) {
+                throw new IllegalArgumentException("Coordonnée invalide pour le navire : " + coord);
+            }
+            if (getCell(coord) == CellStatus.SHIP) {
+                throw new IllegalArgumentException("Un navire occupe déjà cette position : " + coord);
+            }
+            setCell(coord, CellStatus.SHIP);
+        }
+    }
+
+    /**
+     * Génère la liste des coordonnées pour un navire à partir d'une position de départ
+     * @param startCoordinate Coordonnée de départ
+     * @param size Taille du navire
+     * @param orientation Orientation du navire
+     * @return Liste des coordonnées du navire
+     */
+    public List<Coordinate> generateShipCoordinates(Coordinate startCoordinate, int size, ShipOrientation orientation) {
+        List<Coordinate> coordinates = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            Coordinate coord;
+            switch (orientation) {
+                case HORIZONTAL:
+                    coord = startCoordinate.add(i, 0);
+                    break;
+                case HORIZONTAL_LEFT:
+                    coord = startCoordinate.add(-i, 0);
+                    break;
+                case VERTICAL:
+                    coord = startCoordinate.add(0, i);
+                    break;
+                case VERTICAL_UP:
+                    coord = startCoordinate.add(0, -i);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Orientation non supportée : " + orientation);
+            }
+            coordinates.add(coord);
+        }
+        return coordinates;
     }
 }
 

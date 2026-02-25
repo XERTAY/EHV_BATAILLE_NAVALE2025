@@ -6,6 +6,7 @@ import java.util.List;
 
 public class Ship {
 
+    private static int nextId = 1;
     private final int id;
     private final String name;
     private final int size;
@@ -48,6 +49,10 @@ public class Ship {
 
     public void setSunk(boolean sunk) {
         this.sunk = sunk;
+    }
+
+    public static int generateId() {
+        return nextId++;
     }
 }
 

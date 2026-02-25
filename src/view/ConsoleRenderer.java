@@ -1,5 +1,7 @@
 package com.ehv.battleship.view;
 
+import com.ehv.battleship.model.CellStatus;
+import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Grid;
 import com.ehv.battleship.model.Player;
@@ -53,6 +55,70 @@ public class ConsoleRenderer {
             sb.setLength(sb.length() - System.lineSeparator().length() * 2);
         }
 
+        return sb.toString();
+    }
+
+    // Affiche la grille du joueur avec ses navires (S = navire, ~ = eau)
+    public String renderPlayerGrid(Grid grid) {
+        if (grid == null) {
+            throw new IllegalArgumentException("La grille ne peut pas être nulle");
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        int size = grid.getSize();
+        
+        sb.append("     ");
+        for (int col = 1; col <= size; col++) {
+            sb.append(col);
+            if (col < size) {
+                sb.append(" ");
+            }
+        }
+        sb.append(System.lineSeparator());
+        
+        for (int rowDisplay = 1; rowDisplay <= size; rowDisplay++) {
+            int y = rowDisplay - 1;
+            
+            if (rowDisplay < 10) {
+                sb.append(rowDisplay).append("  | ");
+            } else {
+                sb.append(rowDisplay).append(" | ");
+            }
+            
+            for (int x = 0; x < size; x++) {
+                Coordinate coord = new Coordinate(x, y);
+                CellStatus status = grid.getCell(coord);
+                char symbol;
+                
+                switch (status) {
+                    case SHIP:
+                        symbol = 'S';
+                        break;
+                    case HIT:
+                        symbol = 'X';
+                        break;
+                    case MISS:
+                        symbol = '?';
+                        break;
+                    case SUNK:
+                        symbol = '#';
+                        break;
+                    default:
+                        symbol = '~';
+                        break;
+                }
+                
+                sb.append(symbol);
+                if (x < size - 1) {
+                    sb.append(" ");
+                }
+            }
+            
+            if (rowDisplay < size) {
+                sb.append(System.lineSeparator());
+            }
+        }
+        
         return sb.toString();
     }
 }
