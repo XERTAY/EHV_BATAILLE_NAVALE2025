@@ -10,38 +10,39 @@ import com.ehv.battleship.model.ShotResult;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
+import java.util.ArrayList;
 
 public class ConsoleMain {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         ConsoleRenderer renderer = new ConsoleRenderer();
+
+        System.out.println("=== Bataille navale - Mode console ===");
+        int gridSize = askGridSize(scanner);
+        List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
         
         // Créer les joueurs : deux joueurs ( prochainement avec IA)
 
         List<Player> players = Arrays.asList(
-            new Player("Joueur 1", 10),
-            new Player("Joueur 2", 10)
-            // new Player("IA", 10, new AI())
+            new Player("Joueur 1", gridSize, fleetShipSizes),
+            new Player("Joueur 2", gridSize, fleetShipSizes)
+            // new Player("IA", gridSize, new AI(), fleetShipSizes)
         );
-        Game game = new Game(10, players);
+        Game game = new Game(gridSize, players);
         GameController controller = new GameController(game);
-        int gridSize = controller.getGridSize();
-
-        System.out.println("=== Bataille navale - Mode console ===");
+        int configuredGridSize = controller.getGridSize();
         
         // Phase de placement
         controller.startPlacementPhase();
         System.out.println("\n=== PHASE DE PLACEMENT ===");
-        System.out.println("Vous devez placer vos navires :");
-        System.out.println("- 1 Porte-avions (5 cases)");
-        System.out.println("- 1 Cuirassé (4 cases)");
-        System.out.println("- 1 Croiseur (3 cases)");
-        System.out.println("- 1 Sous-marin (3 cases)");
-        System.out.println("- 1 Destroyer (2 cases)");
+        System.out.println("Vous devez placer vos navires (même flotte pour les deux joueurs) :");
+        for (int i = 0; i < fleetShipSizes.size(); i++) {
+            System.out.println("- Navire " + (i + 1) + " (" + fleetShipSizes.get(i) + " cases)");
+        }
         System.out.println("Format : x y orientation");
         System.out.println("  Orientation : H (horizontal droite), -H (horizontal gauche), V (vertical bas), -V (vertical haut)");
-        System.out.println("Coordonnées de 1 à " + gridSize);
+        System.out.println("Coordonnées de 1 à " + configuredGridSize);
         
         // Placement pour chaque joueur
         for (Player player : game.getPlayers()) {
@@ -51,7 +52,7 @@ public class ConsoleMain {
                 System.out.println("\n" + player.getName() + " a placé sa flotte automatiquement.");
             } else {
                 // Placement manuel
-                placeFleetManually(scanner, renderer, controller, player);
+                placeFleetManually(scanner, renderer, controller, player, fleetShipSizes);
             }
         }
         
@@ -65,7 +66,7 @@ public class ConsoleMain {
         controller.finishPlacementPhase();
         System.out.println("\n=== DÉBUT DE LA PARTIE ===");
         System.out.println("O = vide (jamais tiré), X = touché, ? = manqué");
-        System.out.println("Entrez des coordonnées 'x y' (1-" + gridSize + ") ou 'q' pour quitter.");
+        System.out.println("Entrez des coordonnées 'x y' (1-" + configuredGridSize + ") ou 'q' pour quitter.");
 
         while (true) {
             Player current = controller.getCurrentPlayer();
@@ -102,7 +103,7 @@ public class ConsoleMain {
             }
 
             if (!controller.isCoordinateInRange(xInput - 1, yInput - 1)) {
-                System.out.println("Coordonnées hors de la grille. Valeurs entre 1 et " + gridSize + ".");
+                System.out.println("Coordonnées hors de la grille. Valeurs entre 1 et " + configuredGridSize + ".");
                 continue;
             }
 
@@ -140,18 +141,87 @@ public class ConsoleMain {
         scanner.close();
     }
 
+    private static int askGridSize(Scanner scanner) {
+        while (true) {
+            System.out.print("Taille de la grille (minimum 5) : ");
+            String line = scanner.nextLine().trim();
+
+            try {
+                int gridSize = Integer.parseInt(line);
+                if (gridSize < 5) {
+                    System.out.println("La taille de grille doit être au moins 5.");
+                    continue;
+                }
+                return gridSize;
+            } catch (NumberFormatException e) {
+                System.out.println("Valeur invalide. Entrez un entier (ex: 10).\n");
+            }
+        }
+    }
+
+    private static List<Integer> askFleetConfiguration(Scanner scanner, int gridSize) {
+        int shipCount;
+        while (true) {
+            System.out.print("Nombre de navires par joueur (minimum 1) : ");
+            String line = scanner.nextLine().trim();
+
+            try {
+                shipCount = Integer.parseInt(line);
+                if (shipCount < 1) {
+                    System.out.println("Le nombre de navires doit être au moins 1.");
+                    continue;
+                }
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Valeur invalide. Entrez un entier (ex: 5).\n");
+            }
+        }
+
+        List<Integer> shipSizes = new ArrayList<>();
+        int totalShipCells = 0;
+
+        for (int i = 0; i < shipCount; i++) {
+            while (true) {
+                System.out.print("Taille du navire " + (i + 1) + " (entre 1 et " + gridSize + ") : ");
+                String line = scanner.nextLine().trim();
+
+                try {
+                    int size = Integer.parseInt(line);
+                    if (size < 1 || size > gridSize) {
+                        System.out.println("La taille doit être comprise entre 1 et " + gridSize + ".");
+                        continue;
+                    }
+
+                    shipSizes.add(size);
+                    totalShipCells += size;
+                    break;
+                } catch (NumberFormatException e) {
+                    System.out.println("Valeur invalide. Entrez un entier (ex: 3).\n");
+                }
+            }
+        }
+
+        int gridCells = gridSize * gridSize;
+        if (totalShipCells > gridCells) {
+            System.out.println("\nAttention : le total des cases de navires (" + totalShipCells
+                + ") dépasse le nombre de cases de la grille (" + gridCells + ").");
+            System.out.println("Veuillez reconfigurer la flotte.\n");
+            return askFleetConfiguration(scanner, gridSize);
+        }
+
+        return shipSizes;
+    }
+
     // Gère le placement manuel de la flotte pour un joueur
     private static void placeFleetManually(Scanner scanner, ConsoleRenderer renderer, 
-                                      GameController controller, Player player) {
-        int[] shipSizes = {5, 4, 3, 3, 2};
-        String[] shipNames = {"Porte-avions", "Cuirassé", "Croiseur", "Sous-marin", "Destroyer"};
+                                      GameController controller, Player player, List<Integer> shipSizes) {
         int gridSize = controller.getGridSize();
         
         System.out.println("\n=== Placement de la flotte de " + player.getName() + " ===");
         
-        for (int i = 0; i < shipSizes.length; i++) {
-            int size = shipSizes[i];
-            String name = shipNames[i];
+        for (int i = 0; i < shipSizes.size(); i++) {
+            int size = shipSizes.get(i);
+            String name = "Navire " + (i + 1);
             
             while (true) {
                 System.out.println("\nVotre grille actuelle :");
