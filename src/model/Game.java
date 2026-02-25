@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Game {
 
-    private final id id;
+    private static int nextId = 1;
+    private final int id;
     private final int gridSize;
     private GameState state;
     private final Random random;
@@ -20,7 +20,7 @@ public class Game {
         if (players == null || players.size() < 2) {
             throw new IllegalArgumentException("Il faut au moins 2 joueurs");
         }
-        this.id = UUID.randomUUID();
+        this.id = nextId++;
         this.gridSize = gridSize;
         this.state = GameState.SETUP;
         this.players = new ArrayList<>(players);

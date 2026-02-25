@@ -3,10 +3,10 @@ package com.ehv.battleship.model;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Ship {
 
+    private static int nextId = 1;
     private final int id;
     private final String name;
     private final int size;
@@ -49,6 +49,10 @@ public class Ship {
 
     public void setSunk(boolean sunk) {
         this.sunk = sunk;
+    }
+
+    public static int generateId() {
+        return nextId++;
     }
 }
 

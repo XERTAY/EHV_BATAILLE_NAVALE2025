@@ -1,9 +1,8 @@
 package com.ehv.battleship.model;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 public class Player {
 
+    private static int nextId = 1;
     private final int id;
     private final String name;
     private final Grid grid;
@@ -18,7 +17,7 @@ public class Player {
 
     // Constructeur pour joueur IA
     public Player(String name, int gridSize, AI ai) {
-        this.id = UUID.randomUUID();
+        this.id = nextId++;
         this.name = name;
         this.grid = new Grid(gridSize);
         this.fleet = new Fleet();
