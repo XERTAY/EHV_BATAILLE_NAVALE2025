@@ -1,10 +1,12 @@
 package com.ehv.battleship.model;
 
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Player {
 
-    private final String id;
+    private static final AtomicInteger idCounter = new AtomicInteger(1);
+
+    private final int id;
     private final String name;
     private final Grid grid;
     private final Fleet fleet;
@@ -18,7 +20,7 @@ public class Player {
 
     // Constructeur pour joueur IA
     public Player(String name, int gridSize, AI ai) {
-        this.id = UUID.randomUUID().toString();
+        this.id = idCounter.getAndIncrement();
         this.name = name;
         this.grid = new Grid(gridSize);
         this.fleet = new Fleet();
@@ -26,7 +28,7 @@ public class Player {
         this.ai = ai;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 

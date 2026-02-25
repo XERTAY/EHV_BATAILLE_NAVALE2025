@@ -2,7 +2,10 @@ package com.ehv.battleship.controller;
 
 import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.Game;
+import com.ehv.battleship.model.GameState;
 import com.ehv.battleship.model.Player;
+import com.ehv.battleship.model.Ship;
+import com.ehv.battleship.model.ShipOrientation;
 import com.ehv.battleship.model.ShotResult;
 
 import java.util.List;
@@ -52,6 +55,67 @@ public class GameController {
     public void endTurn() {
         game.switchTurn();
     }
-}
 
+    // Place un navire 
+    public void placeShip(int x, int y, int size, ShipOrientation orientation, String shipName) {
+        Player current = getCurrentPlayer();
+        Coordinate startCoord = new Coordinate(x, y);
+        
+        if (!isCoordinateInRange(x, y)) {
+            throw new IllegalArgumentException("Coordonnées hors de la grille");
+        }
+        
+        //  coordonnées navire
+        List<Coordinate> coordinates = current.getGrid().generateShipCoordinates(
+            startCoord, size, orientation);
+        
+        int shipId = Ship.generateId(); // Note: ID unique pour chaque navire
+        Ship ship = new Ship(shipId, shipName, size, coordinates, orientation);
+        game.placeShip(current, ship);
+    }
+
+    // Vérifie si un placement est valide avant de le faire
+    public boolean canPlaceShip(int x, int y, int size, ShipOrientation orientation) {
+        Player current = getCurrentPlayer();
+        Coordinate startCoord = new Coordinate(x, y);
+        
+        if (!isCoordinateInRange(x, y)) {
+            return false;
+        }
+        
+        if (!current.getGrid().canPlaceShip(startCoord, size, orientation)) {
+            return false;
+        }
+        
+        // Vérifier chevauchement avec navires existants
+        List<Coordinate> coordinates = current.getGrid().generateShipCoordinates(
+            startCoord, size, orientation);
+        Ship tempShip = new Ship(0, "temp", size, coordinates, orientation); // Note: navire temporaire pour validation
+        
+        return current.getFleet().canAddShip(tempShip);
+    }
+
+    // Vérifie si toutes les flottes sont complètes
+    public boolean areAllFleetsReady() {
+        for (Player player : game.getPlayers()) {
+            if (!player.getFleet().isComplete()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Démarre la phase de placement
+    public void startPlacementPhase() {
+        game.setState(GameState.PLACEMENT);
+    }
+
+    // Termine le placement et démarre le jeu
+    public void finishPlacementPhase() {
+        if (!areAllFleetsReady()) {
+            throw new IllegalStateException("Toutes les flottes doivent être complètes avant de commencer");
+        }
+        game.start();
+    }
+}
 

@@ -4,11 +4,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Game {
 
-    private final String id;
+    private static final AtomicInteger idCounter = new AtomicInteger(1);
+
+    private final int id;
     private final int gridSize;
     private GameState state;
     private final Random random;
@@ -20,7 +22,7 @@ public class Game {
         if (players == null || players.size() < 2) {
             throw new IllegalArgumentException("Il faut au moins 2 joueurs");
         }
-        this.id = UUID.randomUUID().toString();
+        this.id = idCounter.getAndIncrement();
         this.gridSize = gridSize;
         this.state = GameState.SETUP;
         this.players = new ArrayList<>(players);
@@ -28,7 +30,7 @@ public class Game {
         this.random = new Random();
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
@@ -127,6 +129,34 @@ public class Game {
             defender.getGrid().setCell(coordinate, CellStatus.MISS);
             return ShotResult.MISS;
         }
+    }
+
+    // Place un navire pour un joueur avec validation complète
+    public void placeShip(Player player, Ship ship) {
+        if (player == null || ship == null) {
+            throw new IllegalArgumentException("Le joueur et le navire ne peuvent pas être nuls");
+        }
+        
+        if (!players.contains(player)) {
+            throw new IllegalArgumentException("Le joueur n'appartient pas à ce jeu");
+        }
+        
+        // Vérifier placement sur la grille
+        if (!player.getGrid().canPlaceShip(
+            ship.getCoordinates().get(0), 
+            ship.getSize(), 
+            ship.getOrientation())) {
+            throw new IllegalArgumentException("Le navire ne peut pas être placé à cette position");
+        }
+        
+        // Vérifier chevauchement avec autres navires
+        if (!player.getFleet().canAddShip(ship)) {
+            throw new IllegalArgumentException("Le navire chevauche un autre navire existant");
+        }
+        
+        // Placer sur la grille et ajouter à la flotte
+        player.getGrid().placeShip(ship); // Note: marque les cellules sur la grille
+        player.getFleet().addShip(ship); // Note: ajoute à la liste de la flotte
     }
 }
 
