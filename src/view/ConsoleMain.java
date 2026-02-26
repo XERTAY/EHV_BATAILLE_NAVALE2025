@@ -1,14 +1,10 @@
 package com.ehv.battleship.view;
 
 import com.ehv.battleship.controller.GameController;
-import com.ehv.battleship.model.AI;
 import com.ehv.battleship.model.Game;
-import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Player;
-import com.ehv.battleship.model.ShipOrientation;
 import com.ehv.battleship.model.ShotResult;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 import java.util.ArrayList;
@@ -24,29 +20,11 @@ public class ConsoleMain {
 
         boolean loadExistingGame = askStartMode(scanner);
         if (loadExistingGame) {
-            while (true) {
-                System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
-                String input = scanner.nextLine().trim();
-                String savePath = input.isEmpty() ? "saves/bataille-navale.save" : input;
-
-                try {
-                    game = GamePersistence.load(savePath);
-                    System.out.println("Partie chargée depuis : " + savePath);
-                    break;
-                } catch (Exception e) {
-                    System.out.println("Erreur de chargement : " + e.getMessage());
-                }
-            }
+            game = askLoadGame(scanner);
         } else {
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
-
-            List<Player> players = Arrays.asList(
-                new Player("Joueur 1", gridSize, fleetShipSizes),
-                new Player("Joueur 2", gridSize, fleetShipSizes)
-                // new Player("IA", gridSize, new AI(), fleetShipSizes)
-            );
-            game = new Game(gridSize, players);
+            game = GameController.createNewGame(gridSize, fleetShipSizes);
 
             GameController placementController = new GameController(game);
             int configuredGridSize = placementController.getGridSize();
@@ -61,7 +39,7 @@ public class ConsoleMain {
             System.out.println("  Orientation : H (horizontal droite), -H (horizontal gauche), V (vertical bas), -V (vertical haut)");
             System.out.println("Coordonnées de 1 à " + configuredGridSize);
 
-            for (Player player : game.getPlayers()) {
+            for (Player player : placementController.getPlayers()) {
                 if (player.isAI()) {
                     player.getAI().placeFleet(game, player);
                     System.out.println("\n" + player.getName() + " a placé sa flotte automatiquement.");
@@ -114,7 +92,7 @@ public class ConsoleMain {
             if (line.equalsIgnoreCase("save") || line.toLowerCase().startsWith("save ")) {
                 String savePath = extractOptionalPath(line, "save", "saves/bataille-navale.save");
                 try {
-                    GamePersistence.save(game, savePath);
+                    controller.saveGame(savePath);
                     System.out.println("Partie sauvegardée dans : " + savePath);
                 } catch (Exception e) {
                     System.out.println("Erreur de sauvegarde : " + e.getMessage());
@@ -202,6 +180,22 @@ public class ConsoleMain {
         return suffix;
     }
 
+    /** Demande le chemin et charge la partie via le contrôleur (persistance hors vue). */
+    private static Game askLoadGame(Scanner scanner) {
+        while (true) {
+            System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
+            String input = scanner.nextLine().trim();
+            String savePath = input.isEmpty() ? "saves/bataille-navale.save" : input;
+            try {
+                Game game = GameController.loadGame(savePath);
+                System.out.println("Partie chargée depuis : " + savePath);
+                return game;
+            } catch (Exception e) {
+                System.out.println("Erreur de chargement : " + e.getMessage());
+            }
+        }
+    }
+
     private static boolean askStartMode(Scanner scanner) {
         while (true) {
             System.out.println("Choisissez une option :");
@@ -281,10 +275,9 @@ public class ConsoleMain {
             }
         }
 
-        int gridCells = gridSize * gridSize;
-        if (totalShipCells > gridCells) {
+        if (!GameController.isValidFleetConfiguration(gridSize, shipSizes)) {
             System.out.println("\nAttention : le total des cases de navires (" + totalShipCells
-                + ") dépasse le nombre de cases de la grille (" + gridCells + ").");
+                + ") dépasse le nombre de cases de la grille (" + (gridSize * gridSize) + ").");
             System.out.println("Veuillez reconfigurer la flotte.\n");
             return askFleetConfiguration(scanner, gridSize);
         }
@@ -292,88 +285,51 @@ public class ConsoleMain {
         return shipSizes;
     }
 
-    // Gère le placement manuel de la flotte pour un joueur
-    private static void placeFleetManually(Scanner scanner, ConsoleRenderer renderer, 
-                                      GameController controller, Player player, List<Integer> shipSizes) {
-        int gridSize = controller.getGridSize();
-        
+    /** Placement manuel : la vue lit les entrées et affiche ; le contrôleur valide et place. */
+    private static void placeFleetManually(Scanner scanner, ConsoleRenderer renderer,
+                                          GameController controller, Player player, List<Integer> shipSizes) {
         System.out.println("\n=== Placement de la flotte de " + player.getName() + " ===");
-        
+
         for (int i = 0; i < shipSizes.size(); i++) {
             int size = shipSizes.get(i);
             String name = "Navire " + (i + 1);
-            
+
             while (true) {
                 System.out.println("\nVotre grille actuelle :");
                 System.out.println(renderer.renderPlayerGrid(player.getGrid()));
                 System.out.println("\nPlacez votre " + name + " (" + size + " cases)");
                 System.out.print("Coordonnées et orientation (x y H/-H/V/-V) : ");
-                
+
                 String line = scanner.nextLine().trim();
                 if (line.isEmpty()) {
                     continue;
                 }
-                
+
                 String[] parts = line.split("\\s+");
                 if (parts.length != 3) {
                     System.out.println("Format invalide. Utilisez : x y orientation (ex: 3 5 H ou 3 5 -H)");
                     continue;
                 }
-                
+
+                int x, y;
                 try {
-                    int x = Integer.parseInt(parts[0]);
-                    int y = Integer.parseInt(parts[1]);
-                    String orientationStr = parts[2].toUpperCase();
-                    
-                    ShipOrientation orientation;
-                    if (orientationStr.equals("H")) {
-                        orientation = ShipOrientation.HORIZONTAL;
-                    } else if (orientationStr.equals("-H")) {
-                        orientation = ShipOrientation.HORIZONTAL_LEFT;
-                    } else if (orientationStr.equals("V")) {
-                        orientation = ShipOrientation.VERTICAL;
-                    } else if (orientationStr.equals("-V")) {
-                        orientation = ShipOrientation.VERTICAL_UP;
-                    } else {
-                        System.out.println("Orientation invalide. Utilisez H, -H, V ou -V.");
-                        System.out.println("  H = horizontal vers la droite");
-                        System.out.println("  -H = horizontal vers la gauche");
-                        System.out.println("  V = vertical vers le bas");
-                        System.out.println("  -V = vertical vers le haut");
-                        continue;
-                    }
-                    
-                    // Convertir en coordonnées 0-indexed
-                    int x0 = x - 1;
-                    int y0 = y - 1;
-                    
-                    // Vérifier d'abord si les coordonnées de départ sont dans la grille
-                    if (!controller.isCoordinateInRange(x0, y0)) {
-                        System.out.println("Erreur : Les coordonnées de départ (" + x + ", " + y + ") sont hors de la grille.");
-                        System.out.println("Les coordonnées doivent être entre 1 et " + gridSize + ".");
-                        continue;
-                    }
-                    
-                    // Vérifier si le placement est valide (vérifie aussi que le navire ne dépasse pas)
-                    if (!controller.canPlaceShip(x0, y0, size, orientation)) {
-                        System.out.println("Placement invalide. Le navire dépasse de la grille ou chevauche un autre navire.");
-                        System.out.println("Veuillez choisir une autre position.");
-                        continue;
-                    }
-                    
-                    // Placer le navire
-                    controller.placeShip(x0, y0, size, orientation, name);
-                    System.out.println(name + " placé avec succès !");
-                    break;
-                    
+                    x = Integer.parseInt(parts[0]);
+                    y = Integer.parseInt(parts[1]);
                 } catch (NumberFormatException e) {
                     System.out.println("Coordonnées invalides. Utilisez des entiers pour x et y.");
-                } catch (IllegalArgumentException e) {
-                    System.out.println("Erreur : " + e.getMessage());
+                    continue;
                 }
+
+                String orientationStr = parts[2];
+                var result = controller.tryPlaceShip(x - 1, y - 1, size, orientationStr, name);
+                if (result.isSuccess()) {
+                    System.out.println(name + " placé avec succès !");
+                    break;
+                }
+                System.out.println(result.getMessage());
             }
         }
-        
+
         System.out.println("\nFlotte de " + player.getName() + " complète !");
         System.out.println(renderer.renderPlayerGrid(player.getGrid()));
     }
