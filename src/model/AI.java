@@ -1,61 +1,55 @@
-package com.ehv.battleship.model;
-
 import java.util.List;
 import java.util.Random;
 import java.io.Serializable;
 
-public class AI implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+public class AI extends Player {
 
-    private final Random random;
+    private final Random random = new Random();
 
-    public AI() {
-        this.random = new Random();
+    public AI(String name, int gridSize, List<Integer> shipSizes) {
+        super(name, gridSize, shipSizes);
     }
 
-    /**
-     * Choisit une coordonnée pour tirer sur un adversaire
-     * @param game Le jeu actuel
-     * @param aiPlayer Le joueur IA qui doit tirer
-     * @return La coordonnée choisie, ou null si aucun adversaire disponible
-     */
-    public Coordinate chooseTarget(Game game, Player aiPlayer) {
-        List<Player> opponents = game.getOpponents(aiPlayer);
-        if (opponents.isEmpty()) {
-            return null;
-        }
+    @Override
+    public boolean isAI() {
+        return true;
+    }
 
-        Player target = opponents.get(random.nextInt(opponents.size()));
-        int gridSize = game.getGridSize();
+    public void autoPlaceFleet(GameController controller) {
 
-        int attempts = 0;
-        int maxAttempts = gridSize * gridSize;
+        int gridSize = controller.getGridSize();
         
-        while (attempts < maxAttempts) {
-            int x = random.nextInt(gridSize);
-            int y = random.nextInt(gridSize);
-            Coordinate coordinate = new Coordinate(x, y);
-            
-            CellStatus status = target.getGrid().getCell(coordinate);
-            if (status == CellStatus.EMPTY || status == CellStatus.SHIP) {
-                return coordinate;
+        for (int size : getFleet().getShips().stream().map(Ship::getSize).toList())
+         {
+
+            boolean placed = false;
+
+            while (!placed) {
+
+                int x = random.nextInt(gridSize);
+                int y = random.nextInt(gridSize);
+
+                ShipOrientation orientation =
+                        ShipOrientation.values()[
+                                random.nextInt(
+                                    ShipOrientation.values().length
+                                )
+                        ];
+
+                if (controller.canPlaceShip(x, y, size, orientation)) {
+
+                    controller.placeShip(
+                            x,
+                            y,
+                            size,
+                            orientation,
+                            "AI-" + size
+                    );
+
+                    placed = true;
+                }
             }
-            
-            attempts++;
         }
-
-        
-        return null;
-    }
-
-    /**
-     * Place automatiquement la flotte du joueur IA
-     * @param game Le jeu actuel
-     * @param aiPlayer Le joueur IA qui doit placer sa flotte
-     */
-    public void placeFleet(Game game, Player aiPlayer) {
-        // TODO: Implémenter le placement automatique des navires
     }
 }
-
