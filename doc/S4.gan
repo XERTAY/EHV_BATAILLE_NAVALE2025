@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Gantt: Bataille navalle" company="Groupe Vincent T. Hadjer D. Elouann BC." webLink="" view-date="2026-02-06" view-index="0" gantt-divider-location="198" resource-divider-location="300" version="3.3.3322" locale="fr_FR">
+<?xml version="1.0" encoding="UTF-8"?><project name="Gantt: Bataille navalle" company="Groupe Vincent T. Hadjer D. Elouann BC." webLink="" view-date="2026-02-14" view-index="0" gantt-divider-location="198" resource-divider-location="300" version="3.3.3322" locale="fr_FR">
     <description><![CDATA[Projet: Dévellopper un jeu inspiré de la bataille navalle]]></description>
     <view zooming-state="default:0" id="gantt-chart">
         <field id="tpd3" name="Nom" width="112" order="0"/>
@@ -90,20 +90,20 @@
         <task id="15" uid="cf5436a634de49afbd907fead883b63e" name="préparation présentation" meeting="false" start="2026-05-06" duration="11" complete="0" priority="4" expand="true">
             <depend id="11" type="2" difference="0" hardness="Strong"/>
         </task>
-        <task id="17" uid="ca733b28b5864557bd853e64889acd83" name="Ajout de l'IA" meeting="false" start="2026-02-24" duration="13" complete="3" expand="true">
+        <task id="17" uid="ca733b28b5864557bd853e64889acd83" name="Ajout de fonctionalités CORE" meeting="false" start="2026-02-24" duration="13" complete="6" expand="true">
+            <depend id="18" type="2" difference="0" hardness="Strong"/>
             <task id="14" uid="4b627aca63fe47abbe887bdd7a410eef" name="Implémentation de l'IA" meeting="false" start="2026-02-24" duration="9" complete="5" expand="true">
                 <depend id="16" type="2" difference="0" hardness="Strong"/>
             </task>
             <task id="16" uid="c1998e1f97a94100905e42fadfb37a42" name="debug" meeting="false" start="2026-03-09" duration="4" complete="0" expand="true">
-                <depend id="19" type="2" difference="0" hardness="Strong"/>
+                <depend id="18" type="2" difference="0" hardness="Strong"/>
             </task>
-        </task>
-        <task id="26" uid="61afe4fdaf5c4ce885b6c4b1d89c2f10" name="Intégration d'une API pour react+springbot" meeting="false" start="2026-02-24" duration="13" complete="0" expand="true">
-            <depend id="18" type="2" difference="0" hardness="Strong"/>
-        </task>
-        <task id="25" uid="9b3f1227aaec40eb8167471ddef69c6d" name="Ajout du système de sauvegarde" meeting="false" start="2026-02-24" duration="9" complete="0" expand="true">
-            <depend id="16" type="2" difference="0" hardness="Strong"/>
-            <depend id="18" type="2" difference="0" hardness="Strong"/>
+            <task id="26" uid="61afe4fdaf5c4ce885b6c4b1d89c2f10" name="Intégration d'une API pour react+springbot" meeting="false" start="2026-02-24" duration="13" complete="10" expand="true">
+                <depend id="18" type="2" difference="0" hardness="Strong"/>
+            </task>
+            <task id="25" uid="9b3f1227aaec40eb8167471ddef69c6d" name="Ajout du système de sauvegarde" meeting="false" start="2026-02-24" duration="9" complete="5" expand="true">
+                <depend id="16" type="2" difference="0" hardness="Strong"/>
+            </task>
         </task>
         <task id="24" uid="a0cb2a0ab1954d6d8a7f65f65580b1c8" name="debug et finition" meeting="false" start="2026-04-27" duration="7" complete="0" expand="true">
             <depend id="15" type="2" difference="0" hardness="Strong"/>
@@ -114,7 +114,7 @@
                 <depend id="20" type="2" difference="0" hardness="Strong"/>
             </task>
             <task id="20" uid="f66bce309a7846ba94095696921a78be" name="debug multijoueur" meeting="false" start="2026-03-30" duration="5" complete="0" expand="true">
-                <depend id="22" type="2" difference="0" hardness="Strong"/>
+                <depend id="21" type="2" difference="0" hardness="Strong"/>
             </task>
         </task>
         <task id="21" uid="e36dbbb80fb34a04923e0ba08e0ec42c" name="Ajout de capacité au navire" meeting="false" start="2026-04-06" duration="15" complete="0" expand="true">
@@ -122,7 +122,9 @@
             <task id="22" uid="de30e311c6ed4c94a04aa0e4f5413382" name="Implementation des capacités" meeting="false" start="2026-04-06" duration="10" complete="0" expand="true">
                 <depend id="23" type="2" difference="0" hardness="Strong"/>
             </task>
-            <task id="23" uid="c0ff26f645b046c0956de9cdfa687662" name="debug capacité" meeting="false" start="2026-04-20" duration="5" complete="0" expand="true"/>
+            <task id="23" uid="c0ff26f645b046c0956de9cdfa687662" name="debug capacité" meeting="false" start="2026-04-20" duration="5" complete="0" expand="true">
+                <depend id="24" type="2" difference="0" hardness="Strong"/>
+            </task>
         </task>
     </tasks>
     <resources>
