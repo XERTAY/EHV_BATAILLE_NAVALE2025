@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Gantt: Bataille navalle" company="Groupe Vincent T. Hadjer D. Elouann BC." webLink="" view-date="2026-02-23" view-index="0" gantt-divider-location="198" resource-divider-location="300" version="3.3.3322" locale="fr_FR">
+<?xml version="1.0" encoding="UTF-8"?><project name="Gantt: Bataille navalle" company="Groupe Vincent T. Hadjer D. Elouann BC." webLink="" view-date="2026-02-06" view-index="0" gantt-divider-location="198" resource-divider-location="300" version="3.3.3322" locale="fr_FR">
     <description><![CDATA[Projet: Dévellopper un jeu inspiré de la bataille navalle]]></description>
     <view zooming-state="default:0" id="gantt-chart">
         <field id="tpd3" name="Nom" width="112" order="0"/>
@@ -75,6 +75,8 @@
         </task>
         <task id="13" uid="8be3adc0d53e4010b43a95e3561b2970" name="Jeu JvsJ" meeting="false" start="2026-02-04" duration="14" complete="100" expand="true">
             <depend id="17" type="2" difference="0" hardness="Strong"/>
+            <depend id="25" type="2" difference="0" hardness="Strong"/>
+            <depend id="26" type="2" difference="0" hardness="Strong"/>
             <task id="3" uid="f947ca5679a34751a73fec41da62861b" name="Création du backend JvsJ" meeting="false" start="2026-02-04" duration="6" complete="100" expand="true">
                 <depend id="7" type="2" difference="0" hardness="Strong"/>
             </task>
@@ -89,13 +91,19 @@
             <depend id="11" type="2" difference="0" hardness="Strong"/>
         </task>
         <task id="17" uid="ca733b28b5864557bd853e64889acd83" name="Ajout de l'IA" meeting="false" start="2026-02-24" duration="13" complete="3" expand="true">
-            <depend id="18" type="2" difference="0" hardness="Strong"/>
             <task id="14" uid="4b627aca63fe47abbe887bdd7a410eef" name="Implémentation de l'IA" meeting="false" start="2026-02-24" duration="9" complete="5" expand="true">
                 <depend id="16" type="2" difference="0" hardness="Strong"/>
             </task>
-            <task id="16" uid="c1998e1f97a94100905e42fadfb37a42" name="debug IA" meeting="false" start="2026-03-09" duration="4" complete="0" expand="true">
+            <task id="16" uid="c1998e1f97a94100905e42fadfb37a42" name="debug" meeting="false" start="2026-03-09" duration="4" complete="0" expand="true">
                 <depend id="19" type="2" difference="0" hardness="Strong"/>
             </task>
+        </task>
+        <task id="26" uid="61afe4fdaf5c4ce885b6c4b1d89c2f10" name="Intégration d'une API pour react+springbot" meeting="false" start="2026-02-24" duration="13" complete="0" expand="true">
+            <depend id="18" type="2" difference="0" hardness="Strong"/>
+        </task>
+        <task id="25" uid="9b3f1227aaec40eb8167471ddef69c6d" name="Ajout du système de sauvegarde" meeting="false" start="2026-02-24" duration="9" complete="0" expand="true">
+            <depend id="16" type="2" difference="0" hardness="Strong"/>
+            <depend id="18" type="2" difference="0" hardness="Strong"/>
         </task>
         <task id="24" uid="a0cb2a0ab1954d6d8a7f65f65580b1c8" name="debug et finition" meeting="false" start="2026-04-27" duration="7" complete="0" expand="true">
             <depend id="15" type="2" difference="0" hardness="Strong"/>
@@ -136,17 +144,17 @@
         <allocation task-id="7" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="12" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="13" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
-        <allocation task-id="14" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="15" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="17" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="16" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
-        <allocation task-id="18" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="19" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="20" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="21" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="22" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="23" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="24" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
+        <allocation task-id="25" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
+        <allocation task-id="18" resource-id="0" function="Default:1" responsible="true" load="100.0"/>
         <allocation task-id="0" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="1" resource-id="1" function="SoftwareDevelopment:2" responsible="true" load="100.0"/>
         <allocation task-id="2" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
@@ -155,17 +163,16 @@
         <allocation task-id="7" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="12" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="13" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
-        <allocation task-id="14" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="15" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="17" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
-        <allocation task-id="16" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
-        <allocation task-id="18" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="19" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="20" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="21" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="22" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="23" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="24" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
+        <allocation task-id="26" resource-id="1" function="SoftwareDevelopment:2" responsible="true" load="100.0"/>
+        <allocation task-id="18" resource-id="1" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="0" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="2" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="3" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
@@ -174,7 +181,7 @@
         <allocation task-id="7" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="12" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="13" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
-        <allocation task-id="14" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
+        <allocation task-id="14" resource-id="2" function="SoftwareDevelopment:2" responsible="true" load="100.0"/>
         <allocation task-id="15" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="17" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
         <allocation task-id="16" resource-id="2" function="SoftwareDevelopment:2" responsible="false" load="100.0"/>
