@@ -63,3 +63,6 @@ __pycache__/
 # Temporary files
 *.tmp
 *.log
+
+# Save files
+saves/

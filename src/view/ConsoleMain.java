@@ -3,6 +3,7 @@ package com.ehv.battleship.view;
 import com.ehv.battleship.controller.GameController;
 import com.ehv.battleship.model.AI;
 import com.ehv.battleship.model.Game;
+import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.ShipOrientation;
 import com.ehv.battleship.model.ShotResult;
@@ -19,54 +20,71 @@ public class ConsoleMain {
         ConsoleRenderer renderer = new ConsoleRenderer();
 
         System.out.println("=== Bataille navale - Mode console ===");
-        int gridSize = askGridSize(scanner);
-        List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
-        
-        // Créer les joueurs : deux joueurs ( prochainement avec IA)
+        Game game;
 
-        List<Player> players = Arrays.asList(
-            new Player("Joueur 1", gridSize, fleetShipSizes),
-            new Player("Joueur 2", gridSize, fleetShipSizes)
-            // new Player("IA", gridSize, new AI(), fleetShipSizes)
-        );
-        Game game = new Game(gridSize, players);
+        boolean loadExistingGame = askStartMode(scanner);
+        if (loadExistingGame) {
+            while (true) {
+                System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
+                String input = scanner.nextLine().trim();
+                String savePath = input.isEmpty() ? "saves/bataille-navale.save" : input;
+
+                try {
+                    game = GamePersistence.load(savePath);
+                    System.out.println("Partie chargée depuis : " + savePath);
+                    break;
+                } catch (Exception e) {
+                    System.out.println("Erreur de chargement : " + e.getMessage());
+                }
+            }
+        } else {
+            int gridSize = askGridSize(scanner);
+            List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
+
+            List<Player> players = Arrays.asList(
+                new Player("Joueur 1", gridSize, fleetShipSizes),
+                new Player("Joueur 2", gridSize, fleetShipSizes)
+                // new Player("IA", gridSize, new AI(), fleetShipSizes)
+            );
+            game = new Game(gridSize, players);
+
+            GameController placementController = new GameController(game);
+            int configuredGridSize = placementController.getGridSize();
+
+            placementController.startPlacementPhase();
+            System.out.println("\n=== PHASE DE PLACEMENT ===");
+            System.out.println("Vous devez placer vos navires (même flotte pour les deux joueurs) :");
+            for (int i = 0; i < fleetShipSizes.size(); i++) {
+                System.out.println("- Navire " + (i + 1) + " (" + fleetShipSizes.get(i) + " cases)");
+            }
+            System.out.println("Format : x y orientation");
+            System.out.println("  Orientation : H (horizontal droite), -H (horizontal gauche), V (vertical bas), -V (vertical haut)");
+            System.out.println("Coordonnées de 1 à " + configuredGridSize);
+
+            for (Player player : game.getPlayers()) {
+                if (player.isAI()) {
+                    player.getAI().placeFleet(game, player);
+                    System.out.println("\n" + player.getName() + " a placé sa flotte automatiquement.");
+                } else {
+                    placeFleetManually(scanner, renderer, placementController, player, fleetShipSizes);
+                }
+            }
+
+            if (!placementController.areAllFleetsReady()) {
+                System.out.println("Erreur : Toutes les flottes ne sont pas complètes.");
+                return;
+            }
+
+            placementController.finishPlacementPhase();
+        }
+
         GameController controller = new GameController(game);
         int configuredGridSize = controller.getGridSize();
-        
-        // Phase de placement
-        controller.startPlacementPhase();
-        System.out.println("\n=== PHASE DE PLACEMENT ===");
-        System.out.println("Vous devez placer vos navires (même flotte pour les deux joueurs) :");
-        for (int i = 0; i < fleetShipSizes.size(); i++) {
-            System.out.println("- Navire " + (i + 1) + " (" + fleetShipSizes.get(i) + " cases)");
-        }
-        System.out.println("Format : x y orientation");
-        System.out.println("  Orientation : H (horizontal droite), -H (horizontal gauche), V (vertical bas), -V (vertical haut)");
-        System.out.println("Coordonnées de 1 à " + configuredGridSize);
-        
-        // Placement pour chaque joueur
-        for (Player player : game.getPlayers()) {
-            if (player.isAI()) {
-                // Placement automatique pour l'IA
-                player.getAI().placeFleet(game, player);
-                System.out.println("\n" + player.getName() + " a placé sa flotte automatiquement.");
-            } else {
-                // Placement manuel
-                placeFleetManually(scanner, renderer, controller, player, fleetShipSizes);
-            }
-        }
-        
-        // Vérifier que toutes les flottes sont complètes
-        if (!controller.areAllFleetsReady()) {
-            System.out.println("Erreur : Toutes les flottes ne sont pas complètes.");
-            return;
-        }
-        
-        // Démarrer le jeu
-        controller.finishPlacementPhase();
+
         System.out.println("\n=== DÉBUT DE LA PARTIE ===");
         System.out.println("O = vide (jamais tiré), X = touché, ? = manqué");
-        System.out.println("Entrez des coordonnées 'x y' (1-" + configuredGridSize + ") ou 'q' pour quitter.");
+        System.out.println("Entrez des coordonnées 'x y' (1-" + configuredGridSize + "),");
+        System.out.println("ou 'save [fichier]', 'q' pour quitter.");
 
         while (true) {
             if (controller.isGameFinished()) {
@@ -91,6 +109,17 @@ public class ConsoleMain {
             if (line.equalsIgnoreCase("q")) {
                 System.out.println("Vous avez quitté la partie.");
                 break;
+            }
+
+            if (line.equalsIgnoreCase("save") || line.toLowerCase().startsWith("save ")) {
+                String savePath = extractOptionalPath(line, "save", "saves/bataille-navale.save");
+                try {
+                    GamePersistence.save(game, savePath);
+                    System.out.println("Partie sauvegardée dans : " + savePath);
+                } catch (Exception e) {
+                    System.out.println("Erreur de sauvegarde : " + e.getMessage());
+                }
+                continue;
             }
 
             if (line.isEmpty()) {
@@ -163,6 +192,33 @@ public class ConsoleMain {
         }
 
         scanner.close();
+    }
+
+    private static String extractOptionalPath(String line, String command, String defaultPath) {
+        String suffix = line.substring(command.length()).trim();
+        if (suffix.isEmpty()) {
+            return defaultPath;
+        }
+        return suffix;
+    }
+
+    private static boolean askStartMode(Scanner scanner) {
+        while (true) {
+            System.out.println("Choisissez une option :");
+            System.out.println("1) Nouvelle partie");
+            System.out.println("2) Charger une sauvegarde");
+            System.out.print("Votre choix (1/2) : ");
+
+            String line = scanner.nextLine().trim();
+            if (line.equals("1")) {
+                return false;
+            }
+            if (line.equals("2")) {
+                return true;
+            }
+
+            System.out.println("Choix invalide. Entrez 1 ou 2.");
+        }
     }
 
     private static int askGridSize(Scanner scanner) {

@@ -2,8 +2,11 @@ package com.ehv.battleship.model;
 
 import java.util.List;
 import java.util.Random;
+import java.io.Serializable;
 
-public class AI {
+public class AI implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private final Random random;
 

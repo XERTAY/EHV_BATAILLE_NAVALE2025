@@ -4,8 +4,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.io.Serializable;
 
-public class Fleet {
+public class Fleet implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private final List<Ship> ships = new ArrayList<>();
     private final List<Integer> requiredSizes;

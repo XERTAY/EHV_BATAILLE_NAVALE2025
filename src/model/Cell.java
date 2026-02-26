@@ -1,6 +1,10 @@
 package com.ehv.battleship.model;
 
-public class Cell {
+import java.io.Serializable;
+
+public class Cell implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private final Coordinate coordinate;
     private CellStatus status;

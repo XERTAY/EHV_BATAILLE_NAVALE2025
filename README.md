@@ -69,6 +69,17 @@ Pour run :
 make run 
 ```
 
+## Sauvegarde / chargement (mode console)
+
+Au démarrage, avant le placement, vous pouvez choisir :
+
+- `1) Nouvelle partie` : création d'une partie puis placement des navires
+- `2) Charger une sauvegarde` : chargement d'une partie existante
+
+Pendant une partie, vous pouvez utiliser :
+
+- `save [chemin]` : sauvegarde la partie courante (par défaut `saves/bataille-navale.save`)
+
 ou bien après compilation :
 
 ```

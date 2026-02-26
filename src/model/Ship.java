@@ -3,8 +3,11 @@ package com.ehv.battleship.model;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.io.Serializable;
 
-public class Ship {
+public class Ship implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private static int nextId = 1;
     private final int id;
@@ -25,6 +28,12 @@ public class Ship {
 
     public int getId() {
         return id;
+    }
+
+    public static void ensureNextIdAtLeast(int minimumNextId) {
+        if (minimumNextId > nextId) {
+            nextId = minimumNextId;
+        }
     }
 
     public String getName() {

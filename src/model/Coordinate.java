@@ -1,8 +1,11 @@
 package com.ehv.battleship.model;
 
+import java.io.Serializable;
 import java.util.Objects;
 
-public class Coordinate {
+public class Coordinate implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private final int x;
     private final int y;

@@ -1,8 +1,11 @@
 package com.ehv.battleship.model;
 
 import java.util.List;
+import java.io.Serializable;
 
-public class Player {
+public class Player implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private static int nextId = 1;
     private final int id;
@@ -43,6 +46,12 @@ public class Player {
 
     public int getId() {
         return id;
+    }
+
+    public static void ensureNextIdAtLeast(int minimumNextId) {
+        if (minimumNextId > nextId) {
+            nextId = minimumNextId;
+        }
     }
 
     public String getName() {
