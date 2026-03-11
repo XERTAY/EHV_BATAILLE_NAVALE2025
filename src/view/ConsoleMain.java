@@ -24,7 +24,12 @@ public class ConsoleMain {
         } else {
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
-            game = GameController.createNewGame(gridSize, fleetShipSizes);
+            boolean vsAI = askGameMode(scanner);
+            if (vsAI) {
+                  game = GameController.createNewGameVsAI(gridSize, fleetShipSizes);
+            } else {
+                 game = GameController.createNewGame(gridSize, fleetShipSizes);
+            }
 
             GameController placementController = new GameController(game);
             int configuredGridSize = placementController.getGridSize();
@@ -214,6 +219,26 @@ public class ConsoleMain {
             System.out.println("Choix invalide. Entrez 1 ou 2.");
         }
     }
+
+    private static boolean askGameMode(Scanner scanner) {
+    while (true) {
+        System.out.println("\nChoisissez le mode de jeu :");
+        System.out.println("1) Joueur vs Joueur");
+        System.out.println("2) Joueur vs IA");
+        System.out.print("Votre choix (1/2) : ");
+
+        String line = scanner.nextLine().trim();
+
+        if (line.equals("1")) {
+            return false; // pas d'IA
+        }
+        if (line.equals("2")) {
+            return true; // IA
+        }
+
+        System.out.println("Choix invalide. Entrez 1 ou 2.");
+    }
+}
 
     private static int askGridSize(Scanner scanner) {
         while (true) {
