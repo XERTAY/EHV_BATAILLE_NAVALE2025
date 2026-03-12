@@ -25,6 +25,11 @@ public class AI extends Player {
     // Positions touchées du navire en cours
     private final List<Coordinate> hitPositions = new ArrayList<>();
 
+    public AI(String name, int gridSize) {
+        super(name, gridSize);
+    }
+
+
     public AI(String name, int gridSize, List<Integer> shipSizes) {
         super(name, gridSize, shipSizes);
     }
@@ -42,7 +47,7 @@ public class AI extends Player {
         int gridSize = controller.getGridSize();
         int shipIndex = 1;
 
-        for (Ship ship : getFleet().getShips()) {
+        for (Integer shipSize : getFleet().getRequiredSizes()) {
             boolean placed = false;
             int attempts = 0;
 
@@ -53,13 +58,13 @@ public class AI extends Player {
                 ShipOrientation orientation =
                         ShipOrientation.values()[random.nextInt(ShipOrientation.values().length)];
 
-                if (controller.canPlaceShip(x, y, ship.getSize(), orientation)) {
+                if (controller.canPlaceShip(x, y, shipSize, orientation)) {
                     controller.placeShip(
                             x,
                             y,
-                            ship.getSize(),
+                        shipSize,
                             orientation,
-                            "AI-" + ship.getSize() + "-" + shipIndex
+                        "AI-" + shipSize + "-" + shipIndex
                     );
                     placed = true;
                 }
@@ -69,7 +74,7 @@ public class AI extends Player {
 
             if (!placed) {
                 throw new IllegalStateException(
-                        "Impossible de placer le navire de taille " + ship.getSize()
+                        "Impossible de placer le navire de taille " + shipSize
                 );
             }
 
@@ -82,9 +87,9 @@ public class AI extends Player {
      * (Le GameController opère sur game.getCurrentPlayer(), donc la console doit
      * appeler ça quand c'est bien au tour de ce joueur en phase de placement.)
      */
-    public void placeFleet(Game game, Player player) {
-        autoPlaceFleet(new GameController(game));
-    }
+   public void placeFleet(GameController controller) {
+    autoPlaceFleet(controller);
+}
 
     /**
      * Choisit la prochaine cible.
