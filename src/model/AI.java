@@ -8,7 +8,7 @@ public class AI implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private final Random random;
+    private transient final Random random;
 
     public AI() {
         this.random = new Random();

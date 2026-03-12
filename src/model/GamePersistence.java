@@ -1,62 +1,56 @@
 package com.ehv.battleship.model;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public final class GamePersistence {
 
     private GamePersistence() {
     }
 
-    public static void save(Game game, String filePath) throws IOException {
+    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
+    public static void save(Game game, String fileName) throws IOException {
         if (game == null) {
             throw new IllegalArgumentException("Le jeu ne peut pas être nul");
         }
-        if (filePath == null || filePath.trim().isEmpty()) {
-            throw new IllegalArgumentException("Le chemin du fichier ne peut pas être vide");
+        if (fileName == null || fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Le nom du fichier ne peut pas être vide");
         }
 
+        // Auto-route: saves/filename.save
+        String filePath = "saves/" + fileName;
+        if (!filePath.endsWith(".save")) {
+            filePath += ".save";
+        }
         Path path = Paths.get(filePath).toAbsolutePath().normalize();
         Path parent = path.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
 
-        try (ObjectOutputStream output = new ObjectOutputStream(
-            new BufferedOutputStream(Files.newOutputStream(path)))) {
-            output.writeObject(game);
-        }
+        String json = gson.toJson(game);
+        Files.write(path, json.getBytes());
     }
 
-    public static Game load(String filePath) throws IOException {
-        if (filePath == null || filePath.trim().isEmpty()) {
-            throw new IllegalArgumentException("Le chemin du fichier ne peut pas être vide");
+    public static Game load(String fileName) throws IOException {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Le nom du fichier ne peut pas être vide");
         }
-
+        String filePath = "saves/" + fileName;
+        if (!filePath.endsWith(".save")) {
+            filePath += ".save";
+        }
         Path path = Paths.get(filePath).toAbsolutePath().normalize();
         if (!Files.exists(path)) {
             throw new IOException("Fichier de sauvegarde introuvable : " + path);
         }
-
-        Object loadedObject;
-        try (ObjectInputStream input = new ObjectInputStream(
-            new BufferedInputStream(Files.newInputStream(path)))) {
-            loadedObject = input.readObject();
-        } catch (ClassNotFoundException e) {
-            throw new IOException("Format de sauvegarde invalide", e);
-        }
-
-        if (!(loadedObject instanceof Game)) {
-            throw new IOException("Le fichier ne contient pas une sauvegarde de partie valide");
-        }
-
-        Game loadedGame = (Game) loadedObject;
+        String json = new String(Files.readAllBytes(path));
+        Game loadedGame = gson.fromJson(json, Game.class);
         synchronizeIdCounters(loadedGame);
         return loadedGame;
     }
