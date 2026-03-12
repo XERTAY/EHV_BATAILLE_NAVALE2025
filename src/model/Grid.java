@@ -40,6 +40,7 @@ public class Grid implements Serializable {
                 sb.append(" ");
             }
         }
+        sb.append(" ( x )");
         sb.append(System.lineSeparator());
 
         for (int rowDisplay = 1; rowDisplay <= size; rowDisplay++) {
@@ -74,6 +75,8 @@ public class Grid implements Serializable {
             }
         }
 
+        sb.append(System.lineSeparator());
+        sb.append("( y )");
         return sb.toString();
     }
 
