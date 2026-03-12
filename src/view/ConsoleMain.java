@@ -114,10 +114,10 @@ public class ConsoleMain {
             }
 
             if (line.equalsIgnoreCase("save") || line.toLowerCase().startsWith("save ")) {
-                String savePath = extractOptionalPath(line, "save", "saves/bataille-navale.save");
+                String fileName = extractOptionalFileName(line, "save", "bataille-navale");
                 try {
-                    controller.saveGame(savePath);
-                    System.out.println("Partie sauvegardée dans : " + savePath);
+                    controller.saveGame(fileName);
+                    System.out.println("Partie sauvegardée dans : saves/" + fileName + (fileName.endsWith(".save") ? "" : ".save"));
                 } catch (Exception e) {
                     System.out.println("Erreur de sauvegarde : " + e.getMessage());
                 }
@@ -196,10 +196,10 @@ public class ConsoleMain {
         scanner.close();
     }
 
-    private static String extractOptionalPath(String line, String command, String defaultPath) {
+    private static String extractOptionalFileName(String line, String command, String defaultName) {
         String suffix = line.substring(command.length()).trim();
         if (suffix.isEmpty()) {
-            return defaultPath;
+            return defaultName;
         }
         return suffix;
     }

@@ -78,7 +78,16 @@ Au démarrage, avant le placement, vous pouvez choisir :
 
 Pendant une partie, vous pouvez utiliser :
 
-- `save [chemin]` : sauvegarde la partie courante (par défaut `saves/bataille-navale.save`)
+- `save [nom]` : sauvegarde la partie courante dans `saves/[nom].save` (par défaut `saves/bataille-navale.save`)
+
+Exemple :
+
+```
+save partie1
+```
+Sauvegarde dans `saves/partie1.save`
+
+Le format de sauvegarde est désormais JSON (lisible et modifiable), au lieu du format binaire Java.
 
 ou bien après compilation :
 

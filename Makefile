@@ -11,17 +11,18 @@ JAVA_FILES = $(shell find $(SRC_DIR) -name "*.java")
 # Classe principale à exécuter
 MAIN_CLASS = com.ehv.battleship.view.ConsoleMain
 
+LIBS = lib/gson-2.10.1.jar
+
 # Compiler tous les fichiers Java
 compile:
-	javac -d $(OUT_DIR) $(JAVA_FILES)
+	javac -cp $(LIBS) -d $(OUT_DIR) $(JAVA_FILES)
 
 # Nettoyer les fichiers compilés
 clean:
 	find $(OUT_DIR) -name "*.class" -type f -delete
 
-# Exécuter le jeu
 run: compile
-	java $(MAIN_CLASS)
+	java -cp $(OUT_DIR):$(LIBS) $(MAIN_CLASS)
 
 # Règle par défaut
 all: compile
