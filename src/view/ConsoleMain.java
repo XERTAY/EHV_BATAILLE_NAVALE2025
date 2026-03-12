@@ -1,6 +1,7 @@
 package com.ehv.battleship.view;
 
 import com.ehv.battleship.controller.GameController;
+import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.ShotResult;
