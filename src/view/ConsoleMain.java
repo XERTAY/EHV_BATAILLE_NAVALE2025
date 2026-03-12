@@ -4,6 +4,7 @@ import com.ehv.battleship.controller.GameController;
 import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Player;
+import com.ehv.battleship.model.AI;
 import com.ehv.battleship.model.ShotResult;
 
 import java.util.List;
@@ -68,19 +69,16 @@ public class ConsoleMain {
             System.out.println("  Orientation : H (horizontal droite), -H (horizontal gauche), V (vertical bas), -V (vertical haut)");
             System.out.println("Coordonnées de 1 à " + configuredGridSize);
 
-            for (Player player : placementController.getPlayers()) {
-                if (player.isAI()) {
-                    player.getAI().placeFleet(game, player);
-                    System.out.println("\n" + player.getName() + " a placé sa flotte automatiquement.");
-                } else {
-                    placeFleetManually(scanner, renderer, placementController, player, fleetShipSizes);
-                }
-            }
+            for (int i = 0; i < placementController.getPlayers().size(); i++) {
+                 Player currentPlayer = placementController.getCurrentPlayer();
 
-            if (!placementController.areAllFleetsReady()) {
-                System.out.println("Erreur : Toutes les flottes ne sont pas complètes.");
-                return;
-            }
+                  if (currentPlayer instanceof AI) {
+                    ((AI) currentPlayer).placeFleet(placementController);
+                      System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
+                  } else {
+                      placeFleetManually(scanner, renderer, placementController, currentPlayer, fleetShipSizes);
+                  }
+                  }
 
             placementController.finishPlacementPhase();
         }
@@ -370,7 +368,7 @@ public class ConsoleMain {
                 }
 
                 String orientationStr = parts[2];
-                var result = controller.tryPlaceShip(x - 1, y - 1, size, orientationStr, name);
+                GameController.PlaceShipResult result = controller.tryPlaceShip(x - 1, y - 1, size, orientationStr, name);
                 if (result.isSuccess()) {
                     System.out.println(name + " placé avec succès !");
                     break;
