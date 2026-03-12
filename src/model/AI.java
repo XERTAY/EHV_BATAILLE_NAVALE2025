@@ -1,6 +1,9 @@
+package com.ehv.battleship.model;
+
+import com.ehv.battleship.controller.GameController;
+
 import java.util.List;
 import java.util.Random;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -72,6 +75,15 @@ public class AI extends Player {
 
             shipIndex++;
         }
+    }
+
+    /**
+     * API attendue par la console : place la flotte pour le joueur courant du jeu.
+     * (Le GameController opère sur game.getCurrentPlayer(), donc la console doit
+     * appeler ça quand c'est bien au tour de ce joueur en phase de placement.)
+     */
+    public void placeFleet(Game game, Player player) {
+        autoPlaceFleet(new GameController(game));
     }
 
     /**
