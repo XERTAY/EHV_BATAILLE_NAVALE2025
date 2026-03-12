@@ -1,6 +1,7 @@
 package com.ehv.battleship.view;
 
 import com.ehv.battleship.controller.GameController;
+import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.ShotResult;
@@ -20,7 +21,30 @@ public class ConsoleMain {
 
         boolean loadExistingGame = askStartMode(scanner);
         if (loadExistingGame) {
-            game = askLoadGame(scanner);
+            // Display available saves
+            java.io.File savesDir = new java.io.File("saves");
+            String[] saveFiles = savesDir.list();
+            if (saveFiles != null && saveFiles.length > 0) {
+                System.out.println("Sauvegardes disponibles :");
+                for (String file : saveFiles) {
+                    System.out.println("- " + file);
+                }
+            } else {
+                System.out.println("Aucune sauvegarde disponible dans saves/. Veuillez en créer une ou entrer un chemin personnalisé.");
+            }
+            while (true) {
+                System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
+                String input = scanner.nextLine().trim();
+                String savePath = input.isEmpty() ? "saves/bataille-navale.save" : input;
+
+                try {
+                    game = GamePersistence.load(savePath);
+                    System.out.println("Partie chargée depuis : " + savePath);
+                    break;
+                } catch (Exception e) {
+                    System.out.println("Erreur de chargement : " + e.getMessage());
+                }
+            }
         } else {
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
