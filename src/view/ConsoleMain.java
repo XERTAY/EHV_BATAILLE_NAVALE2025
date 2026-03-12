@@ -24,6 +24,17 @@ public class ConsoleMain {
 
         boolean loadExistingGame = askStartMode(scanner);
         if (loadExistingGame) {
+            // Display available saves
+            java.io.File savesDir = new java.io.File("saves");
+            String[] saveFiles = savesDir.list();
+            if (saveFiles != null && saveFiles.length > 0) {
+                System.out.println("Sauvegardes disponibles :");
+                for (String file : saveFiles) {
+                    System.out.println("- " + file);
+                }
+            } else {
+                System.out.println("Aucune sauvegarde disponible dans saves/. Veuillez en créer une ou entrer un chemin personnalisé.");
+            }
             while (true) {
                 System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
                 String input = scanner.nextLine().trim();
