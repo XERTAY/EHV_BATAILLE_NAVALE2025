@@ -5,6 +5,7 @@ import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.AI;
+import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.ShotResult;
 
 import java.util.List;
@@ -75,6 +76,8 @@ public class ConsoleMain {
                   if (currentPlayer instanceof AI) {
                     ((AI) currentPlayer).placeFleet(placementController);
                       System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
+                      System.out.println("\nGrille de " + currentPlayer.getName() + " après le placement :");
+                      System.out.println(renderer.renderPlayerGrid(currentPlayer.getGrid()));
                   } else {
                       placeFleetManually(scanner, renderer, placementController, currentPlayer, fleetShipSizes);
                   }
@@ -105,6 +108,23 @@ public class ConsoleMain {
 
             Player current = controller.getCurrentPlayer();
             Player target = controller.getTargetPlayer();
+
+            // Tour de l'IA : joue automatiquement
+            if (current instanceof AI) {
+                AI ai = (AI) current;
+                Coordinate aiCoord = ai.chooseTarget();
+                ShotResult aiResult = controller.playShot(aiCoord.getX(), aiCoord.getY());
+                ai.handleShotResult(aiCoord, aiResult);
+                System.out.println("\n--- Tour de " + current.getName() + " ---");
+                System.out.println(current.getName() + " tire en (" + (aiCoord.getX() + 1) + ", " + (aiCoord.getY() + 1) + ") : " + aiResult);
+                System.out.println("\nGrille de " + target.getName() + " après le tir de l'IA :");
+                System.out.println(renderer.renderPlayerGrid(target.getGrid()));
+                if (aiResult == ShotResult.MISS) {
+                    controller.endTurn();
+                }
+                System.out.println();
+                continue;
+            }
 
             System.out.println(renderer.renderPlayerTurn(current, target));
 
@@ -157,6 +177,9 @@ public class ConsoleMain {
             switch (result) {
                 case HIT:
                     System.out.println("HIT (TOUCHÉ) ! Vous rejouez.");
+                    break;
+                case SUNK:
+                    System.out.println("SUNK (COULÉ) ! Vous rejouez.");
                     break;
                 case MISS:
                     System.out.println("MISS (MANQUÉ).");
