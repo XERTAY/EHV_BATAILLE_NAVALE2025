@@ -53,14 +53,17 @@ public class ConsoleMain {
         } else {
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
-            int gameMode = askGameMode(scanner);
-            if (gameMode == 2) {
-                game = GameController.createNewGameVsAI(gridSize, fleetShipSizes);
-            } else if (gameMode == 3) {
-                game = GameController.createNewGameWithAI(gridSize, fleetShipSizes, 3, 1);
+            int totalPlayers = askTotalPlayerCount(scanner);
+            boolean withAI = askWithAI(scanner);
+
+            if (!withAI) {
+                game = GameController.createNewGame(gridSize, fleetShipSizes, totalPlayers);
+            } else if (totalPlayers == 2) {
+                game = GameController.createNewGameWithAI(gridSize, fleetShipSizes, 1, 1);
             } else {
-                int playerCount = askHumanPlayerCount(scanner);
-                game = GameController.createNewGame(gridSize, fleetShipSizes, playerCount);
+                int humanCount = askHumanCountForMixedFourPlayerMode(scanner);
+                int aiCount = 4 - humanCount;
+                game = GameController.createNewGameWithAI(gridSize, fleetShipSizes, humanCount, aiCount);
             }
 
             GameController placementController = new GameController(game);
@@ -287,33 +290,9 @@ public class ConsoleMain {
         }
     }
 
-    private static int askGameMode(Scanner scanner) {
-    while (true) {
-        System.out.println("\nChoisissez le mode de jeu :");
-        System.out.println("1) Joueur vs Joueur");
-        System.out.println("2) Joueur vs IA");
-            System.out.println("3) 3 joueurs + IA");
-            System.out.print("Votre choix (1/2/3) : ");
-
-        String line = scanner.nextLine().trim();
-
-        if (line.equals("1")) {
-                return 1;
-        }
-        if (line.equals("2")) {
-                return 2;
-            }
-            if (line.equals("3")) {
-                return 3;
-        }
-
-            System.out.println("Choix invalide. Entrez 1, 2 ou 3.");
-    }
-}
-
-    private static int askHumanPlayerCount(Scanner scanner) {
+    private static int askTotalPlayerCount(Scanner scanner) {
         while (true) {
-            System.out.print("Nombre de joueurs humains (2 ou 4) : ");
+            System.out.print("Nombre total de joueurs (2 ou 4) : ");
             String line = scanner.nextLine().trim();
 
             try {
@@ -325,6 +304,40 @@ public class ConsoleMain {
                 return count;
             } catch (NumberFormatException e) {
                 System.out.println("Valeur invalide. Entrez un entier (2 ou 4).");
+            }
+        }
+    }
+
+    private static boolean askWithAI(Scanner scanner) {
+        while (true) {
+            System.out.print("Partie avec IA ? (o/n) : ");
+            String line = scanner.nextLine().trim().toLowerCase();
+
+            if (line.equals("o") || line.equals("oui")) {
+                return true;
+            }
+            if (line.equals("n") || line.equals("non")) {
+                return false;
+            }
+
+            System.out.println("Choix invalide. Répondez par o/oui ou n/non.");
+        }
+    }
+
+    private static int askHumanCountForMixedFourPlayerMode(Scanner scanner) {
+        while (true) {
+            System.out.print("Nombre de joueurs humains pour la partie à 4 (1, 2 ou 3) : ");
+            String line = scanner.nextLine().trim();
+
+            try {
+                int count = Integer.parseInt(line);
+                if (count < 1 || count > 3) {
+                    System.out.println("Choix invalide. Entrez 1, 2 ou 3.");
+                    continue;
+                }
+                return count;
+            } catch (NumberFormatException e) {
+                System.out.println("Valeur invalide. Entrez un entier (1, 2 ou 3).");
             }
         }
     }

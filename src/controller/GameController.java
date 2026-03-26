@@ -372,8 +372,8 @@ public static Game createNewGameWithAI(int gridSize, List<Integer> fleetShipSize
         throw new IllegalArgumentException("Il faut au moins 1 IA.");
     }
     int totalPlayers = humanCount + aiCount;
-    if (totalPlayers != 4) {
-        throw new IllegalArgumentException("Cette configuration doit contenir exactement 4 joueurs au total.");
+    if (totalPlayers != 2 && totalPlayers != 4) {
+        throw new IllegalArgumentException("Cette configuration doit contenir 2 ou 4 joueurs au total.");
     }
 
     List<Player> players = new java.util.ArrayList<>();
