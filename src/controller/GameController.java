@@ -65,6 +65,10 @@ public class GameController {
      * @throws IllegalArgumentException si la configuration de flotte est invalide (trop de cases)
      */
     public static Game createNewGame(int gridSize, List<Integer> fleetShipSizes) {
+        return createNewGame(gridSize, fleetShipSizes, 2);
+    }
+
+    public static Game createNewGame(int gridSize, List<Integer> fleetShipSizes, int playerCount) {
         if (!isValidFleetConfiguration(gridSize, fleetShipSizes)) {
             int total = 0;
             for (Integer size : fleetShipSizes) {
@@ -76,10 +80,16 @@ public class GameController {
             throw new IllegalArgumentException(
                 "Le total des cases de navires (" + total + ") dépasse le nombre de cases de la grille (" + gridCells + ").");
         }
-        List<Player> players = Arrays.asList(
-            new Player("Joueur 1", gridSize, fleetShipSizes),
-            new Player("Joueur 2", gridSize, fleetShipSizes)
-        );
+
+        if (playerCount != 2 && playerCount != 4) {
+            throw new IllegalArgumentException("Le nombre de joueurs doit être 2 ou 4.");
+        }
+
+        List<Player> players = new java.util.ArrayList<>();
+        for (int i = 1; i <= playerCount; i++) {
+            players.add(new Player("Joueur " + i, gridSize, fleetShipSizes));
+        }
+
         return new Game(gridSize, players);
     }
 
@@ -106,14 +116,23 @@ public class GameController {
     }
 
     public Player getTargetPlayer() {
+        List<Player> targets = getAvailableTargets();
+        if (targets.isEmpty()) {
+            throw new IllegalStateException("Aucune cible disponible");
+        }
+        return targets.get(0);
+    }
+
+    public List<Player> getAvailableTargets() {
         Player current = game.getCurrentPlayer();
         List<Player> opponents = game.getOpponents(current);
-        // Pour l'instant, on prend le premier adversaire
-        // Plus tard, on pourra gérer plusieurs adversaires
-        if (opponents.isEmpty()) {
-            throw new IllegalStateException("Aucun adversaire disponible");
+        List<Player> availableTargets = new java.util.ArrayList<>();
+        for (Player opponent : opponents) {
+            if (!opponent.hasLost()) {
+                availableTargets.add(opponent);
+            }
         }
-        return opponents.get(0);
+        return availableTargets;
     }
 
     public boolean isCoordinateInRange(int x, int y) {
@@ -124,6 +143,23 @@ public class GameController {
     public ShotResult playShot(int x, int y) {
         Player current = getCurrentPlayer();
         Player target = getTargetPlayer();
+        Coordinate coordinate = new Coordinate(x, y);
+        return game.shoot(current, target, coordinate);
+    }
+
+    public ShotResult playShot(Player target, int x, int y) {
+        if (target == null) {
+            throw new IllegalArgumentException("La cible ne peut pas être nulle");
+        }
+
+        Player current = getCurrentPlayer();
+        if (current.equals(target)) {
+            throw new IllegalArgumentException("Un joueur ne peut pas se cibler lui-même");
+        }
+        if (target.hasLost()) {
+            throw new IllegalArgumentException("Ce joueur est déjà éliminé");
+        }
+
         Coordinate coordinate = new Coordinate(x, y);
         return game.shoot(current, target, coordinate);
     }
@@ -310,6 +346,43 @@ public static Game createNewGameVsAI(int gridSize, List<Integer> fleetShipSizes)
         new Player("Joueur 1", gridSize, fleetShipSizes),
         new AI("Ordinateur", gridSize, fleetShipSizes)
     );
+
+    return new Game(gridSize, players);
+}
+
+public static Game createNewGameWithAI(int gridSize, List<Integer> fleetShipSizes, int humanCount, int aiCount) {
+
+    if (!isValidFleetConfiguration(gridSize, fleetShipSizes)) {
+        int total = 0;
+        for (Integer size : fleetShipSizes) {
+            if (size != null) {
+                total += size;
+            }
+        }
+        int gridCells = gridSize * gridSize;
+        throw new IllegalArgumentException(
+            "Le total des cases de navires (" + total +
+            ") dépasse le nombre de cases de la grille (" + gridCells + ").");
+    }
+
+    if (humanCount < 1) {
+        throw new IllegalArgumentException("Il faut au moins 1 joueur humain.");
+    }
+    if (aiCount < 1) {
+        throw new IllegalArgumentException("Il faut au moins 1 IA.");
+    }
+    int totalPlayers = humanCount + aiCount;
+    if (totalPlayers != 4) {
+        throw new IllegalArgumentException("Cette configuration doit contenir exactement 4 joueurs au total.");
+    }
+
+    List<Player> players = new java.util.ArrayList<>();
+    for (int i = 1; i <= humanCount; i++) {
+        players.add(new Player("Joueur " + i, gridSize, fleetShipSizes));
+    }
+    for (int i = 1; i <= aiCount; i++) {
+        players.add(new AI("Ordinateur " + i, gridSize, fleetShipSizes));
+    }
 
     return new Game(gridSize, players);
 }
