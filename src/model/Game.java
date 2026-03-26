@@ -84,7 +84,16 @@ public class Game implements Serializable {
     }
 
     public void switchTurn() {
-        currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
+        if (players.isEmpty()) {
+            return;
+        }
+
+        int nextIndex = currentPlayerIndex;
+        do {
+            nextIndex = (nextIndex + 1) % players.size();
+        } while (players.get(nextIndex).hasLost() && nextIndex != currentPlayerIndex);
+
+        currentPlayerIndex = nextIndex;
     }
 
     private void updateFinishedState() {
