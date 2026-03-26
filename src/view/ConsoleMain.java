@@ -4,6 +4,8 @@ import com.ehv.battleship.controller.GameController;
 import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Player;
+import com.ehv.battleship.model.AI;
+import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.ShotResult;
 
 import java.util.List;
@@ -48,7 +50,12 @@ public class ConsoleMain {
         } else {
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
-            game = GameController.createNewGame(gridSize, fleetShipSizes);
+            boolean vsAI = askGameMode(scanner);
+            if (vsAI) {
+                  game = GameController.createNewGameVsAI(gridSize, fleetShipSizes);
+            } else {
+                 game = GameController.createNewGame(gridSize, fleetShipSizes);
+            }
 
             GameController placementController = new GameController(game);
             int configuredGridSize = placementController.getGridSize();
@@ -63,19 +70,18 @@ public class ConsoleMain {
             System.out.println("  Orientation : H (horizontal droite), -H (horizontal gauche), V (vertical bas), -V (vertical haut)");
             System.out.println("Coordonnées de 1 à " + configuredGridSize);
 
-            for (Player player : placementController.getPlayers()) {
-                if (player.isAI()) {
-                    player.getAI().placeFleet(game, player);
-                    System.out.println("\n" + player.getName() + " a placé sa flotte automatiquement.");
-                } else {
-                    placeFleetManually(scanner, renderer, placementController, player, fleetShipSizes);
-                }
-            }
+            for (int i = 0; i < placementController.getPlayers().size(); i++) {
+                 Player currentPlayer = placementController.getCurrentPlayer();
 
-            if (!placementController.areAllFleetsReady()) {
-                System.out.println("Erreur : Toutes les flottes ne sont pas complètes.");
-                return;
-            }
+                  if (currentPlayer instanceof AI) {
+                    ((AI) currentPlayer).placeFleet(placementController);
+                      System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
+                      System.out.println("\nGrille de " + currentPlayer.getName() + " après le placement :");
+                      System.out.println(renderer.renderPlayerGrid(currentPlayer.getGrid()));
+                  } else {
+                      placeFleetManually(scanner, renderer, placementController, currentPlayer, fleetShipSizes);
+                  }
+                  }
 
             placementController.finishPlacementPhase();
         }
@@ -102,6 +108,23 @@ public class ConsoleMain {
 
             Player current = controller.getCurrentPlayer();
             Player target = controller.getTargetPlayer();
+
+            // Tour de l'IA : joue automatiquement
+            if (current instanceof AI) {
+                AI ai = (AI) current;
+                Coordinate aiCoord = ai.chooseTarget();
+                ShotResult aiResult = controller.playShot(aiCoord.getX(), aiCoord.getY());
+                ai.handleShotResult(aiCoord, aiResult);
+                System.out.println("\n--- Tour de " + current.getName() + " ---");
+                System.out.println(current.getName() + " tire en (" + (aiCoord.getX() + 1) + ", " + (aiCoord.getY() + 1) + ") : " + aiResult);
+                System.out.println("\nGrille de " + target.getName() + " après le tir de l'IA :");
+                System.out.println(renderer.renderPlayerGrid(target.getGrid()));
+                if (aiResult == ShotResult.MISS) {
+                    controller.endTurn();
+                }
+                System.out.println();
+                continue;
+            }
 
             System.out.println(renderer.renderPlayerTurn(current, target));
 
@@ -154,6 +177,9 @@ public class ConsoleMain {
             switch (result) {
                 case HIT:
                     System.out.println("HIT (TOUCHÉ) ! Vous rejouez.");
+                    break;
+                case SUNK:
+                    System.out.println("SUNK (COULÉ) ! Vous rejouez.");
                     break;
                 case MISS:
                     System.out.println("MISS (MANQUÉ).");
@@ -238,6 +264,26 @@ public class ConsoleMain {
             System.out.println("Choix invalide. Entrez 1 ou 2.");
         }
     }
+
+    private static boolean askGameMode(Scanner scanner) {
+    while (true) {
+        System.out.println("\nChoisissez le mode de jeu :");
+        System.out.println("1) Joueur vs Joueur");
+        System.out.println("2) Joueur vs IA");
+        System.out.print("Votre choix (1/2) : ");
+
+        String line = scanner.nextLine().trim();
+
+        if (line.equals("1")) {
+            return false; // pas d'IA
+        }
+        if (line.equals("2")) {
+            return true; // IA
+        }
+
+        System.out.println("Choix invalide. Entrez 1 ou 2.");
+    }
+}
 
     private static int askGridSize(Scanner scanner) {
         while (true) {
@@ -345,7 +391,7 @@ public class ConsoleMain {
                 }
 
                 String orientationStr = parts[2];
-                var result = controller.tryPlaceShip(x - 1, y - 1, size, orientationStr, name);
+                GameController.PlaceShipResult result = controller.tryPlaceShip(x - 1, y - 1, size, orientationStr, name);
                 if (result.isSuccess()) {
                     System.out.println(name + " placé avec succès !");
                     break;
