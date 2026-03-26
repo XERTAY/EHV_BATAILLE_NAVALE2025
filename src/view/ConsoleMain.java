@@ -11,8 +11,11 @@ import com.ehv.battleship.model.ShotResult;
 import java.util.List;
 import java.util.Scanner;
 import java.util.ArrayList;
+import java.util.Random;
 
 public class ConsoleMain {
+
+    private static final Random RANDOM = new Random();
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -50,11 +53,14 @@ public class ConsoleMain {
         } else {
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
-            boolean vsAI = askGameMode(scanner);
-            if (vsAI) {
-                  game = GameController.createNewGameVsAI(gridSize, fleetShipSizes);
+            int gameMode = askGameMode(scanner);
+            if (gameMode == 2) {
+                game = GameController.createNewGameVsAI(gridSize, fleetShipSizes);
+            } else if (gameMode == 3) {
+                game = GameController.createNewGameWithAI(gridSize, fleetShipSizes, 3, 1);
             } else {
-                 game = GameController.createNewGame(gridSize, fleetShipSizes);
+                int playerCount = askHumanPlayerCount(scanner);
+                game = GameController.createNewGame(gridSize, fleetShipSizes, playerCount);
             }
 
             GameController placementController = new GameController(game);
@@ -62,7 +68,7 @@ public class ConsoleMain {
 
             placementController.startPlacementPhase();
             System.out.println("\n=== PHASE DE PLACEMENT ===");
-            System.out.println("Vous devez placer vos navires (même flotte pour les deux joueurs) :");
+            System.out.println("Vous devez placer vos navires (même flotte pour tous les joueurs) :");
             for (int i = 0; i < fleetShipSizes.size(); i++) {
                 System.out.println("- Navire " + (i + 1) + " (" + fleetShipSizes.get(i) + " cases)");
             }
@@ -107,15 +113,31 @@ public class ConsoleMain {
             }
 
             Player current = controller.getCurrentPlayer();
-            Player target = controller.getTargetPlayer();
+            List<Player> availableTargets = controller.getAvailableTargets();
+            if (availableTargets.isEmpty()) {
+                System.out.println("Aucune cible disponible pour " + current.getName() + ".");
+                controller.endTurn();
+                continue;
+            }
+                Player target = (availableTargets.size() == 1)
+                    ? availableTargets.get(0)
+                    : (current instanceof AI)
+                    ? availableTargets.get(RANDOM.nextInt(availableTargets.size()))
+                    : askTargetPlayer(scanner, current, availableTargets);
+
+            if (target == null) {
+                System.out.println("Vous avez quitté la partie.");
+                break;
+            }
 
             // Tour de l'IA : joue automatiquement
             if (current instanceof AI) {
                 AI ai = (AI) current;
                 Coordinate aiCoord = ai.chooseTarget();
-                ShotResult aiResult = controller.playShot(aiCoord.getX(), aiCoord.getY());
+                ShotResult aiResult = controller.playShot(target, aiCoord.getX(), aiCoord.getY());
                 ai.handleShotResult(aiCoord, aiResult);
                 System.out.println("\n--- Tour de " + current.getName() + " ---");
+                System.out.println("Cible choisie : " + target.getName());
                 System.out.println(current.getName() + " tire en (" + (aiCoord.getX() + 1) + ", " + (aiCoord.getY() + 1) + ") : " + aiResult);
                 System.out.println("\nGrille de " + target.getName() + " après le tir de l'IA :");
                 System.out.println(renderer.renderPlayerGrid(target.getGrid()));
@@ -172,7 +194,7 @@ public class ConsoleMain {
                 continue;
             }
 
-            ShotResult result = controller.playShot(xInput - 1, yInput - 1);
+            ShotResult result = controller.playShot(target, xInput - 1, yInput - 1);
 
             switch (result) {
                 case HIT:
@@ -265,25 +287,47 @@ public class ConsoleMain {
         }
     }
 
-    private static boolean askGameMode(Scanner scanner) {
+    private static int askGameMode(Scanner scanner) {
     while (true) {
         System.out.println("\nChoisissez le mode de jeu :");
         System.out.println("1) Joueur vs Joueur");
         System.out.println("2) Joueur vs IA");
-        System.out.print("Votre choix (1/2) : ");
+            System.out.println("3) 3 joueurs + IA");
+            System.out.print("Votre choix (1/2/3) : ");
 
         String line = scanner.nextLine().trim();
 
         if (line.equals("1")) {
-            return false; // pas d'IA
+                return 1;
         }
         if (line.equals("2")) {
-            return true; // IA
+                return 2;
+            }
+            if (line.equals("3")) {
+                return 3;
         }
 
-        System.out.println("Choix invalide. Entrez 1 ou 2.");
+            System.out.println("Choix invalide. Entrez 1, 2 ou 3.");
     }
 }
+
+    private static int askHumanPlayerCount(Scanner scanner) {
+        while (true) {
+            System.out.print("Nombre de joueurs humains (2 ou 4) : ");
+            String line = scanner.nextLine().trim();
+
+            try {
+                int count = Integer.parseInt(line);
+                if (count != 2 && count != 4) {
+                    System.out.println("Choix invalide. Entrez 2 ou 4.");
+                    continue;
+                }
+                return count;
+            } catch (NumberFormatException e) {
+                System.out.println("Valeur invalide. Entrez un entier (2 ou 4).");
+            }
+        }
+    }
 
     private static int askGridSize(Scanner scanner) {
         while (true) {
@@ -403,7 +447,31 @@ public class ConsoleMain {
         System.out.println("\nFlotte de " + player.getName() + " complète !");
         System.out.println(renderer.renderPlayerGrid(player.getGrid()));
     }
-}
 
+    private static Player askTargetPlayer(Scanner scanner, Player current, List<Player> targets) {
+        while (true) {
+            System.out.println("\nChoisissez la cible pour " + current.getName() + " :");
+            for (int i = 0; i < targets.size(); i++) {
+                System.out.println((i + 1) + ") " + targets.get(i).getName());
+            }
+            System.out.print("Votre choix (numéro ou 'q' pour quitter) : ");
+
+            String line = scanner.nextLine().trim();
+            try {
+                if (line.equalsIgnoreCase("q")) {
+                    return null;
+                }
+                int selected = Integer.parseInt(line);
+                if (selected < 1 || selected > targets.size()) {
+                    System.out.println("Choix invalide. Réessayez.");
+                    continue;
+                }
+                return targets.get(selected - 1);
+            } catch (NumberFormatException e) {
+                System.out.println("Valeur invalide. Entrez le numéro de la cible.");
+            }
+        }
+    }
+}
 
 
