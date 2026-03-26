@@ -8,6 +8,7 @@ import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.Ship;
 import com.ehv.battleship.model.ShipOrientation;
 import com.ehv.battleship.model.ShotResult;
+import com.ehv.battleship.model.AI;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -247,5 +248,70 @@ public class GameController {
             default:   return null;
         }
     }
+
+
+    // IA
+    public boolean isCurrentPlayerAI() {
+        return getCurrentPlayer() instanceof AI;
+    }
+
+    // Méthode pour que l'IA place automatiquement sa flotte
+
+    public void autoPlaceFleetForAI() {
+
+    Player current = getCurrentPlayer();
+
+    if (!(current instanceof AI)) {
+        throw new IllegalStateException("Le joueur courant n'est pas une IA");
+    }
+
+    AI ai = (AI) current;
+
+    ai.autoPlaceFleet(this);
+}
+
+// Méthode pour que l'IA choisisse sa cible et joue son coup
+    public Coordinate playAITurn() {
+
+    Player current = getCurrentPlayer();
+    Player target = getTargetPlayer();
+
+    if (!(current instanceof AI)) {
+        throw new IllegalStateException("Le joueur courant n'est pas une IA");
+    }
+
+    AI ai = (AI) current;
+
+    Coordinate shot = ai.chooseTarget();
+
+    ShotResult result = game.shoot(current, target, shot);
+
+    ai.handleShotResult(shot, result);
+
+    return shot;
+}
+
+public static Game createNewGameVsAI(int gridSize, List<Integer> fleetShipSizes) {
+
+    if (!isValidFleetConfiguration(gridSize, fleetShipSizes)) {
+        int total = 0;
+        for (Integer size : fleetShipSizes) {
+            if (size != null) {
+                total += size;
+            }
+        }
+        int gridCells = gridSize * gridSize;
+        throw new IllegalArgumentException(
+            "Le total des cases de navires (" + total +
+            ") dépasse le nombre de cases de la grille (" + gridCells + ").");
+    }
+
+    List<Player> players = Arrays.asList(
+        new Player("Joueur 1", gridSize, fleetShipSizes),
+        new AI("Ordinateur", gridSize, fleetShipSizes)
+    );
+
+    return new Game(gridSize, players);
+}
 }
 

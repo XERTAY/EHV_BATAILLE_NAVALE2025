@@ -13,36 +13,22 @@ public class Player implements Serializable {
     private final Grid grid;
     private final Fleet fleet;
     private boolean ready;
-    private final AI ai; // null = joueur humain, non-null = IA
+
 
     // Constructeur pour joueur humain
-    public Player(String name, int gridSize) {
-        this(name, gridSize, null, null);
-    }
+    // constructeur simple
+public Player(String name, int gridSize) {
+    this(name, gridSize, null);
+}
 
-    // Constructeur pour joueur humain avec flotte personnalisée
-    public Player(String name, int gridSize, List<Integer> fleetShipSizes) {
-        this(name, gridSize, null, fleetShipSizes);
-    }
-
-    // Constructeur pour joueur IA
-    public Player(String name, int gridSize, AI ai) {
-        this(name, gridSize, ai, null);
-    }
-
-    // Constructeur complet (IA optionnelle + flotte personnalisée)
-    public Player(String name, int gridSize, AI ai, List<Integer> fleetShipSizes) {
-        this.id = nextId++;
-        this.name = name;
-        this.grid = new Grid(gridSize);
-        if (fleetShipSizes == null) {
-            this.fleet = new Fleet();
-        } else {
-            this.fleet = new Fleet(fleetShipSizes);
-        }
-        this.ready = false;
-        this.ai = ai;
-    }
+// constructeur avec flotte personnalisée
+public Player(String name, int gridSize, List<Integer> fleetShipSizes) {
+    this.id = nextId++;
+    this.name = name;
+    this.grid = new Grid(gridSize);
+    this.fleet = (fleetShipSizes == null) ? new Fleet() : new Fleet(fleetShipSizes);
+    this.ready = false;
+}
 
     public int getId() {
         return id;
@@ -83,16 +69,11 @@ public class Player implements Serializable {
      * @return true si c'est une IA, false si c'est un joueur humain
      */
     public boolean isAI() {
-        return ai != null;
+        return false;
     }
 
-    /**
-     * Retourne le composant IA du joueur
-     * @return L'objet AI si c'est une IA, null sinon
-     */
-    public AI getAI() {
-        return ai;
-    }
+    
+    
 }
 
 

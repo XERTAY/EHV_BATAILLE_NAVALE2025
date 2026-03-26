@@ -74,6 +74,7 @@ public class ConsoleRenderer {
                 sb.append(" ");
             }
         }
+        sb.append(" ( x )");
         sb.append(System.lineSeparator());
         
         for (int rowDisplay = 1; rowDisplay <= size; rowDisplay++) {
@@ -118,6 +119,9 @@ public class ConsoleRenderer {
                 sb.append(System.lineSeparator());
             }
         }
+
+        sb.append(System.lineSeparator());
+        sb.append("( y )");
         
         return sb.toString();
     }

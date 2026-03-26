@@ -142,16 +142,18 @@ public class Game implements Serializable {
             defender.getGrid().setCell(coordinate, CellStatus.HIT);
 
             Ship touchedShip = findShipAtCoordinate(defender, coordinate);
+            boolean sunkNow = false;
             if (touchedShip != null && isShipCompletelyHit(defender, touchedShip)) {
                 touchedShip.setSunk(true);
                 for (Coordinate shipCoordinate : touchedShip.getCoordinates()) {
                     defender.getGrid().setCell(shipCoordinate, CellStatus.SUNK);
                 }
+                sunkNow = true;
             }
 
             updateFinishedState();
 
-            return ShotResult.HIT;
+            return sunkNow ? ShotResult.SUNK : ShotResult.HIT;
         }
 
         defender.getGrid().setCell(coordinate, CellStatus.MISS);
