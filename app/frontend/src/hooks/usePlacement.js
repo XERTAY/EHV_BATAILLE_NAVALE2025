@@ -8,7 +8,7 @@ export const FLEET = [
   { type: 'DESTROYER', size: 2 },
 ]
 
-export default function usePlacement({ currentPlayer, gamePhase }) {
+export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10 }) {
   const [selectedShipType, setSelectedShipType] = useState(FLEET[0].type)
   const [placementOrientation, setPlacementOrientation] = useState('HORIZONTAL')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
@@ -36,12 +36,12 @@ export default function usePlacement({ currentPlayer, gamePhase }) {
     for (let index = 0; index < selectedShip.size; index += 1) {
       const x = placementOrientation === 'HORIZONTAL' ? hoveredPlacementCell.x + index : hoveredPlacementCell.x
       const y = placementOrientation === 'VERTICAL' ? hoveredPlacementCell.y + index : hoveredPlacementCell.y
-      if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+      if (x >= 0 && x < boardSize && y >= 0 && y < boardSize) {
         cells.push({ x, y })
       }
     }
     return cells
-  }, [hoveredPlacementCell, selectedShip, placementOrientation, gamePhase])
+  }, [hoveredPlacementCell, selectedShip, placementOrientation, gamePhase, boardSize])
 
   const handlePlacementSuccess = useCallback((player, shipType) => {
     setHoveredPlacementCell(null)

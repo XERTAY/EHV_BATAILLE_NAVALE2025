@@ -20,6 +20,7 @@ function App() {
 
   const currentPlayer = gameState?.currentPlayer ?? 1
   const gamePhase = gameState?.phase
+  const boardSize = gameState?.boardSize ?? 10
   const boardStatesById = useMemo(() => {
     const stateById = {}
     if (!gameState?.boards) return stateById
@@ -44,6 +45,7 @@ function App() {
   } = usePlacement({
     currentPlayer,
     gamePhase,
+    boardSize,
   })
 
   const interactiveBoards = useMemo(() => {
@@ -204,6 +206,7 @@ function App() {
       )}
       <BoardScene
         boards={boards}
+        boardSize={boardSize}
         boardStatesById={boardStatesById}
         interactiveBoards={interactiveBoards}
         previewCells={placementPreview}
