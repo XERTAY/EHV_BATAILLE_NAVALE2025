@@ -61,12 +61,6 @@ Le diagramme inclut :
 
 ## Lancer le jeu en mode console
 
-<<<<<<< HEAD
-=======
-
-## Lancer le jeu en mode console
-
->>>>>>> 5babf42 (Update Makefile and README for backend compilation and console execution. Introduced new commands for running the console version and cleaned up Maven integration. Enhanced documentation for starting the backend and frontend locally.)
 Depuis la racine du projet :
 
 ```
@@ -84,10 +78,6 @@ make run
 ## Lancer backend et frontend en local (tests)
 
 ### Prerequis
-<<<<<<< HEAD
-
-=======
->>>>>>> 5babf42 (Update Makefile and README for backend compilation and console execution. Introduced new commands for running the console version and cleaned up Maven integration. Enhanced documentation for starting the backend and frontend locally.)
 - Java 17+
 - Maven 3.9+
 - Node.js 20+ et npm
@@ -100,11 +90,7 @@ Terminal 1, depuis la racine du projet :
 mvn -pl app/backend -am spring-boot:run
 ```
 
-<<<<<<< HEAD
 Le backend demarre en local sur `http://localhost:5183`.
-=======
-Le backend demarre en local sur `http://localhost:8080`.
->>>>>>> 5babf42 (Update Makefile and README for backend compilation and console execution. Introduced new commands for running the console version and cleaned up Maven integration. Enhanced documentation for starting the backend and frontend locally.)
 
 ### 2) Demarrer le frontend (Vite)
 
@@ -119,10 +105,6 @@ npm run dev
 Le frontend demarre en local sur `http://localhost:5173`.
 
 ### 3) Tests locaux
-<<<<<<< HEAD
-
-=======
->>>>>>> 5babf42 (Update Makefile and README for backend compilation and console execution. Introduced new commands for running the console version and cleaned up Maven integration. Enhanced documentation for starting the backend and frontend locally.)
 - Garder les deux serveurs demarres (backend + frontend)
 - Ouvrir l'URL du frontend dans le navigateur
 - Verifier les appels au backend depuis l'interface (DevTools > Network)
