@@ -376,6 +376,7 @@ function App() {
       <BoardScene
         boards={boards}
         boardSize={boardSize}
+        boardSize={boardSize}
         boardStatesById={boardStatesById}
         interactiveBoards={interactiveBoards}
         previewCells={placementPreview}
