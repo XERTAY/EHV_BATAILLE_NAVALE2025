@@ -53,21 +53,55 @@ Le diagramme inclut :
 
 
 
-## Lancer le jeu : 
+## Lancer le jeu en mode console
 
-Se mettre dans la racine du projet : 
-
-Pour compiler : 
+Depuis la racine du projet :
 
 ```
-make compile
+make makerun
 ```
 
-Pour run : 
+Cette commande compile le backend puis lance `ConsoleMain` (mode console only).
+
+Commande équivalente (conservée pour compatibilite) :
 
 ```
-make run 
+make run
 ```
+
+## Lancer backend et frontend en local (tests)
+
+### Prerequis
+- Java 17+
+- Maven 3.9+
+- Node.js 20+ et npm
+
+### 1) Demarrer le backend (API Spring Boot)
+
+Terminal 1, depuis la racine du projet :
+
+```
+mvn -pl app/backend -am spring-boot:run
+```
+
+Le backend demarre en local sur `http://localhost:8080`.
+
+### 2) Demarrer le frontend (Vite)
+
+Terminal 2 :
+
+```
+cd app/frontend
+npm install
+npm run dev
+```
+
+Le frontend demarre en local sur `http://localhost:5173`.
+
+### 3) Tests locaux
+- Garder les deux serveurs demarres (backend + frontend)
+- Ouvrir l'URL du frontend dans le navigateur
+- Verifier les appels au backend depuis l'interface (DevTools > Network)
 
 ## Sauvegarde / chargement (mode console)
 
