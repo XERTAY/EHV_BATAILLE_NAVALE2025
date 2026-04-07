@@ -26,6 +26,6 @@ run: compile
 
 # Règle par défaut
 all: compile
-
+	
 .PHONY: compile clean run all
 
