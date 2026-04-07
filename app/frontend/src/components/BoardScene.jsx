@@ -42,6 +42,7 @@ function PerformanceProbe({ enabled, waveMode }) {
 
 function BoardScene({
   boards,
+  boardSize = 10,
   boardStatesById,
   interactiveBoards,
   previewCells,
@@ -84,6 +85,7 @@ function BoardScene({
         <WaterBoard
           key={board.boardId}
           boardId={board.boardId}
+          cells={boardSize}
           cellStates={boardStatesById?.[board.boardId]?.cells}
           ownBoard={Boolean(boardStatesById?.[board.boardId]?.ownBoard)}
           previewCells={board.boardId === previewBoardId ? previewCells : []}
