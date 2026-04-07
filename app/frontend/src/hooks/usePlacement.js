@@ -8,17 +8,8 @@ export const FLEET = [
   { type: 'DESTROYER', size: 2 },
 ]
 
-export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2] }) {
-  // Build dynamic fleet from fleetShipSizes
-  const FLEET = useMemo(() => {
-    const shipTypes = ['CARRIER', 'BATTLESHIP', 'CRUISER', 'SUBMARINE', 'DESTROYER']
-    return fleetShipSizes.map((size, index) => ({
-      type: `SHIP_${index}`, // Use unique type per size/position
-      size: Math.max(1, Number(size) || 1),
-    }))
-  }, [fleetShipSizes])
-
-  const [selectedShipType, setSelectedShipType] = useState(FLEET[0]?.type ?? 'SHIP_0')
+export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10 }) {
+  const [selectedShipType, setSelectedShipType] = useState(FLEET[0].type)
   const [placementOrientation, setPlacementOrientation] = useState('HORIZONTAL')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
   const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState({ 1: [], 2: [] })
@@ -46,10 +37,12 @@ export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10,
       const x = placementOrientation === 'HORIZONTAL' ? hoveredPlacementCell.x + index : hoveredPlacementCell.x
       const y = placementOrientation === 'VERTICAL' ? hoveredPlacementCell.y + index : hoveredPlacementCell.y
       if (x >= 0 && x < boardSize && y >= 0 && y < boardSize) {
+      if (x >= 0 && x < boardSize && y >= 0 && y < boardSize) {
         cells.push({ x, y })
       }
     }
     return cells
+  }, [hoveredPlacementCell, selectedShip, placementOrientation, gamePhase, boardSize])
   }, [hoveredPlacementCell, selectedShip, placementOrientation, gamePhase, boardSize])
 
   const handlePlacementSuccess = useCallback((player, shipType) => {
