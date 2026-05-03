@@ -112,7 +112,7 @@ function App() {
 
   const currentPlayer = gameState?.currentPlayer ?? 1
   const gamePhase = gameState?.phase
-  const boardSize = gameState?.boardSize ?? 10
+  const boardSize = gameState?.boardSize ?? setup.boardSize
   const boardStatesById = useMemo(() => {
     const stateById = {}
     if (!gameState?.boards) return stateById
@@ -145,6 +145,7 @@ function App() {
     currentPlayer,
     gamePhase,
     boardSize,
+    fleetShipSizes: setup.fleetShipSizes,
   })
 
   const interactiveBoards = useMemo(() => {

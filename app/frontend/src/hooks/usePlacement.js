@@ -8,8 +8,17 @@ export const FLEET = [
   { type: 'DESTROYER', size: 2 },
 ]
 
-export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10 }) {
-  const [selectedShipType, setSelectedShipType] = useState(FLEET[0].type)
+export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2] }) {
+  // Build dynamic fleet from fleetShipSizes
+  const FLEET = useMemo(() => {
+    const shipTypes = ['CARRIER', 'BATTLESHIP', 'CRUISER', 'SUBMARINE', 'DESTROYER']
+    return fleetShipSizes.map((size, index) => ({
+      type: `SHIP_${index}`, // Use unique type per size/position
+      size: Math.max(1, Number(size) || 1),
+    }))
+  }, [fleetShipSizes])
+
+  const [selectedShipType, setSelectedShipType] = useState(FLEET[0]?.type ?? 'SHIP_0')
   const [placementOrientation, setPlacementOrientation] = useState('HORIZONTAL')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
   const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState({ 1: [], 2: [] })
