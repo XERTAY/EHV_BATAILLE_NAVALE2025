@@ -1,5 +1,19 @@
 package com.ehv.api.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import com.ehv.api.dto.FireRequest;
 import com.ehv.api.dto.PlaceShipRequest;
 import com.ehv.api.view.ActionResponse;
@@ -11,43 +25,35 @@ import com.ehv.api.view.GameStateResponse;
 import com.ehv.battleship.model.CellStatus;
 import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.Game;
+import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.GameState;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.Ship;
 import com.ehv.battleship.model.ShipOrientation;
 import com.ehv.battleship.model.ShotResult;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
 
 public final class DuelGameService {
-    private static final int BOARD_SIZE = 10;
-    private static final Map<String, Integer> FLEET = Map.of(
-        "CARRIER", 5,
-        "BATTLESHIP", 4,
-        "CRUISER", 3,
-        "SUBMARINE", 3,
-        "DESTROYER", 2
-    );
-
     private final Random random = new Random();
     private Game game;
+    private int boardSize;
+    private List<Integer> fleetSizes;
+    private Map<String, Integer> FLEET; // Dynamic fleet map
     private DuelPhase phase;
     private int currentPlayer;
     private Integer winner;
     private final Map<Integer, Set<String>> placedShipsByPlayer = new LinkedHashMap<>();
 
     public DuelGameService() {
-        reset();
+        reset(10, List.of(5, 4, 3, 3, 2));
     }
 
     public synchronized GameStateResponse resetAndGetState() {
-        reset();
+        reset(10, List.of(5, 4, 3, 3, 2));
+        return getStateForPlayer(currentPlayer);
+    }
+
+    public synchronized GameStateResponse resetAndGetState(int boardSize, List<Integer> fleetSizes) {
+        reset(boardSize, fleetSizes);
         return getStateForPlayer(currentPlayer);
     }
 
@@ -87,7 +93,7 @@ public final class DuelGameService {
         Player ownPlayer = getPlayerById(player);
         Player opponentPlayer = getPlayerById(otherPlayer(player));
         return new GameStateResponse(
-            BOARD_SIZE,
+            boardSize,
             phase,
             currentPlayer,
             winner,
@@ -98,11 +104,61 @@ public final class DuelGameService {
         );
     }
 
-    private void reset() {
-        List<Integer> fleetSizes = List.of(5, 4, 3, 3, 2);
-        game = new Game(BOARD_SIZE, List.of(
-            new Player("Joueur 1", BOARD_SIZE, fleetSizes),
-            new Player("Joueur 2", BOARD_SIZE, fleetSizes)
+    public synchronized List<String> listSaveFiles() {
+        Path savesDir = Path.of("saves");
+        if (!Files.exists(savesDir)) {
+            return List.of();
+        }
+        try (Stream<Path> paths = Files.list(savesDir)) {
+            return paths
+                .filter(Files::isRegularFile)
+                .map(path -> path.getFileName().toString())
+                .filter(name -> name.endsWith(".save"))
+                .sorted()
+                .collect(Collectors.toList());
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Impossible de lire les sauvegardes: " + exception.getMessage());
+        }
+    }
+
+    public synchronized GameStateResponse loadGame(String fileName) {
+        try {
+            Game loadedGame = GamePersistence.load(fileName);
+            if (loadedGame.getPlayers().size() != 2) {
+                throw new IllegalArgumentException("Seules les sauvegardes a 2 joueurs sont supportees par l'API web");
+            }
+            game = loadedGame;
+            synchronizeApiStateFromGame();
+            return getStateForPlayer(currentPlayer);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Erreur de chargement: " + exception.getMessage());
+        }
+    }
+
+    public synchronized GameStateResponse saveGame(String fileName) {
+        try {
+            GamePersistence.save(game, fileName);
+            return getStateForPlayer(currentPlayer);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Erreur de sauvegarde: " + exception.getMessage());
+        }
+    }
+
+    private void reset(int newBoardSize, List<Integer> newFleetSizes) {
+        this.boardSize = Math.max(5, newBoardSize);
+        this.fleetSizes = newFleetSizes != null && !newFleetSizes.isEmpty()
+            ? new ArrayList<>(newFleetSizes)
+            : List.of(5, 4, 3, 3, 2);
+        
+        // Build dynamic FLEET map from fleetSizes
+        this.FLEET = new LinkedHashMap<>();
+        for (int index = 0; index < this.fleetSizes.size(); index++) {
+            this.FLEET.put("SHIP_" + index, this.fleetSizes.get(index));
+        }
+        
+        game = new Game(boardSize, List.of(
+            new Player("Joueur 1", boardSize, fleetSizes),
+            new Player("Joueur 2", boardSize, fleetSizes)
         ));
         game.setState(GameState.PLACEMENT);
         phase = DuelPhase.PLACEMENT;
@@ -113,13 +169,57 @@ public final class DuelGameService {
         placedShipsByPlayer.put(2, new HashSet<>());
     }
 
+    private void synchronizeApiStateFromGame() {
+        if (game.getPlayers().size() != 2) {
+            throw new IllegalArgumentException("Le mode duel de l'API requiert exactement 2 joueurs");
+        }
+
+        Player current = game.getCurrentPlayer();
+        currentPlayer = resolvePlayerNumber(current);
+        winner = null;
+
+        if (game.getState() == GameState.FINISHED || game.isFinished()) {
+            phase = DuelPhase.GAME_OVER;
+            Player winningPlayer = game.getWinner();
+            if (winningPlayer != null) {
+                winner = resolvePlayerNumber(winningPlayer);
+            }
+        } else if (game.getState() == GameState.PLAYING) {
+            phase = DuelPhase.BATTLE;
+        } else {
+            phase = DuelPhase.PLACEMENT;
+        }
+
+        placedShipsByPlayer.clear();
+        placedShipsByPlayer.put(1, collectPlacedShipTypes(1));
+        placedShipsByPlayer.put(2, collectPlacedShipTypes(2));
+    }
+
+    private Set<String> collectPlacedShipTypes(int playerNumber) {
+        Set<String> shipTypes = new HashSet<>();
+        for (Ship ship : getPlayerById(playerNumber).getFleet().getShips()) {
+            if (ship.getName() != null && !ship.getName().isBlank()) {
+                shipTypes.add(ship.getName().trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        return shipTypes;
+    }
+
+    private int resolvePlayerNumber(Player player) {
+        int index = game.getPlayers().indexOf(player);
+        if (index < 0) {
+            throw new IllegalArgumentException("Joueur introuvable dans la partie chargee");
+        }
+        return index + 1;
+    }
+
     private void placeShipRandomly(int player, String shipType) {
         Player current = getPlayerById(player);
         int shipSize = FLEET.get(shipType);
         while (true) {
             ShipOrientation orientation = randomOrientation();
-            int x = random.nextInt(BOARD_SIZE);
-            int y = random.nextInt(BOARD_SIZE);
+            int x = random.nextInt(boardSize);
+            int y = random.nextInt(boardSize);
             try {
                 List<Coordinate> coordinates = current.getGrid().generateShipCoordinates(new Coordinate(x, y), shipSize, orientation);
                 validateShipPlacement(current, coordinates);
@@ -209,10 +309,10 @@ public final class DuelGameService {
     }
 
     private BoardStateView projectBoard(String boardId, boolean ownBoard, Player player) {
-        List<List<CellViewState>> cells = new ArrayList<>(BOARD_SIZE);
-        for (int y = 0; y < BOARD_SIZE; y += 1) {
-            List<CellViewState> row = new ArrayList<>(BOARD_SIZE);
-            for (int x = 0; x < BOARD_SIZE; x += 1) {
+        List<List<CellViewState>> cells = new ArrayList<>(boardSize);
+        for (int y = 0; y < boardSize; y += 1) {
+            List<CellViewState> row = new ArrayList<>(boardSize);
+            for (int x = 0; x < boardSize; x += 1) {
                 row.add(computeCellState(player, ownBoard, x, y));
             }
             cells.add(row);
@@ -238,7 +338,7 @@ public final class DuelGameService {
 
     private void validateShipPlacement(Player player, List<Coordinate> coordinates) {
         for (Coordinate coordinate : coordinates) {
-            if (!coordinate.isValid(BOARD_SIZE)) {
+            if (!coordinate.isValid(boardSize)) {
                 throw new IllegalArgumentException("Coordonnees hors grille");
             }
             if (player.getGrid().getCell(coordinate) == CellStatus.SHIP) {
@@ -303,7 +403,7 @@ public final class DuelGameService {
     }
 
     private void validateCoordinateBounds(int x, int y) {
-        if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) {
+        if (x < 0 || x >= boardSize || y < 0 || y >= boardSize) {
             throw new IllegalArgumentException("Coordonnees hors grille");
         }
     }
