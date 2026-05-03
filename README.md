@@ -109,6 +109,55 @@ Le frontend demarre en local sur `http://localhost:5173`.
 - Ouvrir l'URL du frontend dans le navigateur
 - Verifier les appels au backend depuis l'interface (DevTools > Network)
 
+## WebSocket multijoueur (concurrent, 2 a 4 joueurs)
+
+### Endpoint
+
+- URL: `ws://localhost:5183/ws/game`
+- Origine frontend autorisee: `http://localhost:5173`
+
+### Principe
+
+- Chaque client ouvre une connexion WebSocket.
+- Le backend envoie immediatement `CONNECTED` avec un `sessionId`.
+- Un client peut creer une partie (`CREATE_GAME`) ou rejoindre une partie existante (`JOIN_GAME`).
+- Plusieurs parties peuvent tourner en parallele (isolation par `gameId`).
+- Chaque partie accepte entre 2 et 4 joueurs (`maxPlayers`).
+
+### Messages client -> serveur
+
+Creation de partie:
+
+```json
+{
+	"type": "CREATE_GAME",
+	"maxPlayers": 4
+}
+```
+
+Rejoindre une partie:
+
+```json
+{
+	"type": "JOIN_GAME",
+	"gameId": "<game-id>"
+}
+```
+
+### Messages serveur -> client
+
+- `CONNECTED`: connexion ouverte + `sessionId`
+- `GAME_CREATED`: partie creee (`gameId`, `players`, `maxPlayers`)
+- `JOINED_GAME`: joueur ajoute a la partie (`gameId`, `players`, `maxPlayers`)
+- `PLAYER_COUNT_UPDATED`: broadcast aux joueurs de la partie quand le nombre de joueurs change
+- `ERROR`: erreur de protocole (JSON invalide, type inconnu, partie introuvable/pleine, etc.)
+
+### Notes d'isolement
+
+- Les evenements sont scopes par partie (pas de fuite entre parties).
+- Le backend ne diffuse pas les placements adverses: chaque client ne doit recevoir que les informations autorisees par la logique de jeu.
+- La logique de coups/etat de bataille en WebSocket peut etre ajoutee ensuite sur la meme base (`type` de message + validation serveur).
+
 ## Sauvegarde / chargement (mode console)
 
 Au démarrage, avant le placement, vous pouvez choisir :
