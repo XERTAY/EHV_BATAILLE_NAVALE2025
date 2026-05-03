@@ -6,60 +6,7 @@ import LayoutControls from './components/LayoutControls'
 import { BOARD_CONFIGS } from './config/boardConfigs'
 import useGameApi from './hooks/useGameApi'
 import usePlacement from './hooks/usePlacement'
-
-const LAST_SETUP_KEY = 'bataille-navale:last-setup'
-
-const DEFAULT_SETUP = {
-  startMode: 'new',
-  loadSaveFile: 'bataille-navale',
-  saveFileName: 'bataille-navale',
-  boardSize: 10,
-  fleetShipSizes: [5, 4, 3, 3, 2],
-  playerCount: 2,
-  humanPlayers: 2,
-  withAI: false,
-}
-
-function normalizeSetup(setup) {
-  const playerCount = setup.playerCount === 4 ? 4 : 2
-  const boardSize = Math.max(5, Number(setup.boardSize) || 10)
-  const fleetShipSizes = Array.isArray(setup.fleetShipSizes) && setup.fleetShipSizes.length > 0
-    ? setup.fleetShipSizes.map((size) => Math.max(1, Number(size) || 1))
-    : [5, 4, 3, 3, 2]
-  const withAI = Boolean(setup.withAI)
-  const humanPlayers = withAI
-    ? Math.min(Math.max(1, Number(setup.humanPlayers) || 1), playerCount - 1 || 1)
-    : playerCount
-
-  return {
-    ...DEFAULT_SETUP,
-    ...setup,
-    boardSize,
-    fleetShipSizes,
-    playerCount,
-    humanPlayers,
-    withAI,
-    startMode: setup.startMode === 'load' ? 'load' : 'new',
-    loadSaveFile: setup.loadSaveFile?.trim() ? setup.loadSaveFile.trim() : DEFAULT_SETUP.loadSaveFile,
-    saveFileName: setup.saveFileName?.trim() ? setup.saveFileName.trim() : DEFAULT_SETUP.saveFileName,
-  }
-}
-
-function loadLastSetupFromStorage() {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(LAST_SETUP_KEY)
-    if (!raw) return null
-    return normalizeSetup(JSON.parse(raw))
-  } catch {
-    return null
-  }
-}
-
-function saveLastSetupToStorage(setup) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(LAST_SETUP_KEY, JSON.stringify(setup))
-}
+import useWebSocketGame from './hooks/useWebSocketGame'
 
 function App() {
   const [screen, setScreen] = useState('menu')
@@ -276,23 +223,26 @@ function App() {
     handleCellHover(cellData, expectedOwnBoardId)
   }, [handleCellHover, expectedOwnBoardId])
 
-  const gameSummary = useMemo(() => {
-    return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
-  }, [setup])
+  // --- WebSocket integration ---
+  const { wsState, wsMessage, createGame, joinGame, send } = useWebSocketGame()
 
-  if (screen === 'menu') {
-    return (
-      <GameSetupMenu
-        setup={setup}
-        availableSaves={availableSaves}
-        onChange={applySetupPatch}
-        onStart={handleStartGame}
-        onRefreshSaves={refreshSaves}
-        loading={loading}
-        statusMessage={statusMessage}
-      />
-    )
-  }
+  // Example: auto-create a game on mount (for demo)
+  useEffect(() => {
+    if (wsState.connected && !wsState.gameId) {
+      createGame(4) // or prompt user for number of players
+    }
+  }, [wsState.connected, wsState.gameId, createGame])
+
+  // Example: show WebSocket status
+  useEffect(() => {
+    if (wsMessage?.type === 'GAME_CREATED') {
+      setStatusMessage(`Partie créée. ID: ${wsMessage.gameId}`)
+    } else if (wsMessage?.type === 'JOINED_GAME') {
+      setStatusMessage(`Rejoint la partie. ID: ${wsMessage.gameId}`)
+    } else if (wsMessage?.type === 'ERROR') {
+      setStatusMessage(`Erreur WebSocket: ${wsMessage.message}`)
+    }
+  }, [wsMessage])
 
   return (
     <main className="app-root">
