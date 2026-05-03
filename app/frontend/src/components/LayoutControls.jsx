@@ -7,6 +7,7 @@ function LayoutControls({
   onToggleCoordinates,
   onToggleWaveMode,
   onToggleBenchmark,
+  onOpenMenu,
 }) {
   return (
     <div className="layout-controls">
@@ -44,6 +45,9 @@ function LayoutControls({
         onClick={onToggleBenchmark}
       >
         Benchmark FPS
+      </button>
+      <button type="button" onClick={onOpenMenu}>
+        Menu de depart
       </button>
     </div>
   )

@@ -1,9 +1,12 @@
 body {
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: 'Trebuchet MS', 'Gill Sans', 'Helvetica Neue', sans-serif;
+  background: #05111d;
 }
 
 #root {
   width: 100%;
-  height: 100svh;
+  min-height: 100svh;
 }

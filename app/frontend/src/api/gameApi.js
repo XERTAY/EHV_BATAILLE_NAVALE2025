@@ -13,8 +13,16 @@ async function callApi(path, options = {}) {
   return response.json()
 }
 
-export function resetGame() {
-  return callApi('/game/reset', { method: 'POST' })
+export function resetGame(boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2]) {
+  return callApi('/game/reset', {
+    method: 'POST',
+    body: JSON.stringify({
+      boardSize: Math.max(5, Number(boardSize) || 10),
+      fleetShipSizes: Array.isArray(fleetShipSizes) && fleetShipSizes.length > 0
+        ? fleetShipSizes.map((size) => Math.max(1, Number(size) || 1))
+        : [5, 4, 3, 3, 2],
+    }),
+  })
 }
 
 export function getGameState(player) {
@@ -32,5 +40,23 @@ export function fireAt(payload) {
   return callApi('/game/fire', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export function listSaves() {
+  return callApi('/game/saves')
+}
+
+export function loadGame(fileName) {
+  const file = encodeURIComponent((fileName || 'bataille-navale').trim())
+  return callApi(`/game/load?file=${file}`, {
+    method: 'POST',
+  })
+}
+
+export function saveGame(fileName) {
+  const file = encodeURIComponent((fileName || 'bataille-navale').trim())
+  return callApi(`/game/save?file=${file}`, {
+    method: 'POST',
   })
 }
