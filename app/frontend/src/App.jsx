@@ -6,6 +6,7 @@ import LayoutControls from './components/LayoutControls'
 import { BOARD_CONFIGS } from './config/boardConfigs'
 import useGameApi from './hooks/useGameApi'
 import usePlacement from './hooks/usePlacement'
+import useWebSocketGame from './hooks/useWebSocketGame'
 
 const LAST_SETUP_KEY = 'bataille-navale:last-setup'
 
@@ -273,6 +274,27 @@ function App() {
   const onCellHover = useCallback((cellData) => {
     handleCellHover(cellData, expectedOwnBoardId)
   }, [handleCellHover, expectedOwnBoardId])
+
+  // --- WebSocket integration ---
+  const { wsState, wsMessage, createGame, joinGame, send } = useWebSocketGame()
+
+  // Example: auto-create a game on mount (for demo)
+  useEffect(() => {
+    if (wsState.connected && !wsState.gameId) {
+      createGame(4) // or prompt user for number of players
+    }
+  }, [wsState.connected, wsState.gameId, createGame])
+
+  // Example: show WebSocket status
+  useEffect(() => {
+    if (wsMessage?.type === 'GAME_CREATED') {
+      setStatusMessage(`Partie créée. ID: ${wsMessage.gameId}`)
+    } else if (wsMessage?.type === 'JOINED_GAME') {
+      setStatusMessage(`Rejoint la partie. ID: ${wsMessage.gameId}`)
+    } else if (wsMessage?.type === 'ERROR') {
+      setStatusMessage(`Erreur WebSocket: ${wsMessage.message}`)
+    }
+  }, [wsMessage])
 
   const gameSummary = useMemo(() => {
     return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
