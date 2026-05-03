@@ -1,11 +1,7 @@
 package com.ehv.api.controller;
 
-import com.ehv.api.dto.FireRequest;
-import com.ehv.api.dto.PlaceShipRequest;
-import com.ehv.api.service.DuelGameService;
-import com.ehv.api.view.ActionResponse;
-import com.ehv.api.view.ErrorResponse;
-import com.ehv.api.view.GameStateResponse;
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,6 +11,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.ehv.api.dto.FireRequest;
+import com.ehv.api.dto.PlaceShipRequest;
+import com.ehv.api.dto.ResetGameRequest;
+import com.ehv.api.service.DuelGameService;
+import com.ehv.api.view.ActionResponse;
+import com.ehv.api.view.ErrorResponse;
+import com.ehv.api.view.GameStateResponse;
 
 @RestController
 @RequestMapping("/api")
@@ -27,7 +31,10 @@ public class GameController {
     }
 
     @PostMapping("/game/reset")
-    public GameStateResponse reset() {
+    public GameStateResponse reset(@RequestBody(required = false) ResetGameRequest request) {
+        if (request != null && request.boardSize() > 0 && request.fleetShipSizes() != null && !request.fleetShipSizes().isEmpty()) {
+            return duelGameService.resetAndGetState(request.boardSize(), request.fleetShipSizes());
+        }
         return duelGameService.resetAndGetState();
     }
 
@@ -49,6 +56,21 @@ public class GameController {
     @PostMapping("/game/fire")
     public ActionResponse fire(@RequestBody FireRequest request) {
         return duelGameService.fireAt(request);
+    }
+
+    @GetMapping("/game/saves")
+    public List<String> saves() {
+        return duelGameService.listSaveFiles();
+    }
+
+    @PostMapping("/game/load")
+    public GameStateResponse load(@RequestParam(value = "file", defaultValue = "bataille-navale") String fileName) {
+        return duelGameService.loadGame(fileName);
+    }
+
+    @PostMapping("/game/save")
+    public GameStateResponse save(@RequestParam(value = "file", defaultValue = "bataille-navale") String fileName) {
+        return duelGameService.saveGame(fileName);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

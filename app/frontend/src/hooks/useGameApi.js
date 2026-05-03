@@ -1,16 +1,16 @@
 import { useCallback, useState } from 'react'
-import { fireAt, getGameState, placeShip, resetGame } from '../api/gameApi'
+import { fireAt, getGameState, listSaves, loadGame, placeShip, resetGame, saveGame } from '../api/gameApi'
 
 export default function useGameApi() {
   const [gameState, setGameState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
-  const bootstrapGame = useCallback(async () => {
+  const bootstrapGame = useCallback(async (boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2]) => {
     try {
       setLoading(true)
       setErrorMessage('')
-      await resetGame()
+      await resetGame(boardSize, fleetShipSizes)
       const state = await getGameState(1)
       setGameState(state)
       return state
@@ -52,6 +52,47 @@ export default function useGameApi() {
     }
   }, [])
 
+  const listSavesAction = useCallback(async () => {
+    try {
+      setErrorMessage('')
+      const saves = await listSaves()
+      return Array.isArray(saves) ? saves : []
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    }
+  }, [])
+
+  const loadGameAction = useCallback(async (fileName) => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const state = await loadGame(fileName)
+      setGameState(state)
+      return state
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const saveGameAction = useCallback(async (fileName) => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const state = await saveGame(fileName)
+      setGameState(state)
+      return state
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   return {
     gameState,
     loading,
@@ -59,5 +100,8 @@ export default function useGameApi() {
     bootstrapGame,
     placeShipAction,
     fireAtAction,
+    listSavesAction,
+    loadGameAction,
+    saveGameAction,
   }
 }
