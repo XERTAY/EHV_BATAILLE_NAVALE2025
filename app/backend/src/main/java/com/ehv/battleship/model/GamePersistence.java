@@ -12,7 +12,10 @@ public final class GamePersistence {
     private GamePersistence() {
     }
 
-    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson gson = new GsonBuilder()
+        .setPrettyPrinting()
+        .registerTypeHierarchyAdapter(Player.class, new PlayerTypeAdapter())
+        .create();
 
     public static void save(Game game, String fileName) throws IOException {
         if (game == null) {

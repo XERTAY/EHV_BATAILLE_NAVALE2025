@@ -22,6 +22,7 @@ import com.ehv.api.view.BoardStateView;
 import com.ehv.api.view.CellViewState;
 import com.ehv.api.view.DuelPhase;
 import com.ehv.api.view.GameStateResponse;
+import com.ehv.battleship.model.AI;
 import com.ehv.battleship.model.CellStatus;
 import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.Game;
@@ -30,13 +31,19 @@ import com.ehv.battleship.model.GameState;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.Ship;
 import com.ehv.battleship.model.ShipOrientation;
+import com.ehv.battleship.model.ShootDecision;
 import com.ehv.battleship.model.ShotResult;
 
 public final class DuelGameService {
+
+    private static final int MAX_AUTOMATIC_AI_STEPS = 3000;
+
     private final Random random = new Random();
     private Game game;
     private int boardSize;
     private int playerCount = 2;
+    /** Slots 1..humanSlots = humains, au-delà = IA. */
+    private int humanSlots = 2;
     private List<Integer> fleetSizes;
     private Map<String, Integer> FLEET; // Dynamic fleet map
     private DuelPhase phase;
@@ -45,21 +52,30 @@ public final class DuelGameService {
     private final Map<Integer, Set<String>> placedShipsByPlayer = new LinkedHashMap<>();
 
     public DuelGameService() {
-        reset(10, List.of(5, 4, 3, 3, 2), 2);
+        reset(10, List.of(5, 4, 3, 3, 2), null, false, null);
     }
 
     public synchronized GameStateResponse resetAndGetState() {
-        reset(10, List.of(5, 4, 3, 3, 2), 2);
-        return getStateForPlayer(currentPlayer);
+        reset(10, List.of(5, 4, 3, 3, 2), null, false, null);
+        return getStateForPlayer(viewSlotForClients());
     }
 
     public synchronized GameStateResponse resetAndGetState(int boardSize, List<Integer> fleetSizes) {
-        return resetAndGetState(boardSize, fleetSizes, null);
+        return resetAndGetState(boardSize, fleetSizes, null, null, null);
     }
 
     public synchronized GameStateResponse resetAndGetState(int boardSize, List<Integer> fleetSizes, Integer requestedPlayerCount) {
-        reset(boardSize, fleetSizes, normalizePlayerCount(requestedPlayerCount));
-        return getStateForPlayer(currentPlayer);
+        return resetAndGetState(boardSize, fleetSizes, requestedPlayerCount, null, null);
+    }
+
+    public synchronized GameStateResponse resetAndGetState(
+            int boardSize,
+            List<Integer> fleetSizes,
+            Integer requestedPlayerCount,
+            Boolean withAI,
+            Integer humanPlayers) {
+        reset(boardSize, fleetSizes, requestedPlayerCount, withAI, humanPlayers);
+        return getStateForPlayer(viewSlotForClients());
     }
 
     public synchronized GameStateResponse autoPlaceFleetForBothPlayers() {
@@ -72,7 +88,8 @@ public final class DuelGameService {
         game.setState(GameState.PLAYING);
         phase = DuelPhase.BATTLE;
         currentPlayer = 1;
-        return getStateForPlayer(currentPlayer);
+        advanceUntilHumanOrTerminal();
+        return getStateForPlayer(viewSlotForClients());
     }
 
     public synchronized ActionResponse placeShip(PlaceShipRequest request) {
@@ -81,6 +98,7 @@ public final class DuelGameService {
         placeShipOnBoard(request, shipType);
         placedShipsByPlayer.get(request.player()).add(shipType);
         advancePlacementTurn();
+        advanceUntilHumanOrTerminal();
         return buildActionResponse(ActionResult.PLACED);
     }
 
@@ -92,11 +110,38 @@ public final class DuelGameService {
         Coordinate target = new Coordinate(request.x(), request.y());
         ShotResult shotResult = game.shoot(shooter, targetPlayer, target);
         updateStateAfterShot(shotResult);
+        advanceUntilHumanOrTerminal();
         return buildActionResponse(actionResultFromShot(shotResult));
+    }
+
+    public synchronized GameStateResponse advanceAiSingleStepAndGetState() {
+        if (phase == DuelPhase.GAME_OVER || game.isFinished()) {
+            return getStateForPlayer(viewSlotForClients());
+        }
+        if (isHumanSlot(currentPlayer)) {
+            return getStateForPlayer(viewSlotForClients());
+        }
+        if (phase != DuelPhase.BATTLE) {
+            return getStateForPlayer(viewSlotForClients());
+        }
+
+        Player current = getPlayerById(currentPlayer);
+        if (current.hasLost()) {
+            currentPlayer = nextLivingPlayerCircular(currentPlayer);
+            return getStateForPlayer(viewSlotForClients());
+        }
+        AI ai = (AI) current;
+        ShootDecision decision = ai.chooseShootingTarget(game, currentPlayer);
+        Player defender = getPlayerById(decision.defenderNumber());
+        ShotResult result = game.shoot(ai, defender, decision.coordinate());
+        ai.handleShotResult(decision.defenderNumber(), decision.coordinate(), result);
+        updateStateAfterShot(result);
+        return getStateForPlayer(viewSlotForClients());
     }
 
     public synchronized GameStateResponse getStateForPlayer(int player) {
         validatePlayer(player);
+        advanceUntilHumanOrTerminal();
         List<BoardStateView> boards = new ArrayList<>(playerCount);
         for (int p = 1; p <= playerCount; p++) {
             Player pl = getPlayerById(p);
@@ -109,7 +154,8 @@ public final class DuelGameService {
             currentPlayer,
             winner,
             boards,
-            computePlayersAlive()
+            computePlayersAlive(),
+            computeAiPlayers()
         );
     }
 
@@ -139,7 +185,7 @@ public final class DuelGameService {
             }
             game = loadedGame;
             synchronizeApiStateFromGame();
-            return getStateForPlayer(currentPlayer);
+            return getStateForPlayer(viewSlotForClients());
         } catch (IOException exception) {
             throw new IllegalArgumentException("Erreur de chargement: " + exception.getMessage());
         }
@@ -148,7 +194,7 @@ public final class DuelGameService {
     public synchronized GameStateResponse saveGame(String fileName) {
         try {
             GamePersistence.save(game, fileName);
-            return getStateForPlayer(currentPlayer);
+            return getStateForPlayer(viewSlotForClients());
         } catch (IOException exception) {
             throw new IllegalArgumentException("Erreur de sauvegarde: " + exception.getMessage());
         }
@@ -161,9 +207,36 @@ public final class DuelGameService {
         return 2;
     }
 
-    private void reset(int newBoardSize, List<Integer> newFleetSizes, int players) {
+    private static int humanSlotsFromRequest(Boolean withAI, Integer humanPlayers, int pc) {
+        if (!Boolean.TRUE.equals(withAI)) {
+            return pc;
+        }
+        if (humanPlayers == null) {
+            throw new IllegalArgumentException(
+                "Le nombre de joueurs humains (humanPlayers) est requis lorsque withAI est true.");
+        }
+        int h = humanPlayers.intValue();
+        if (h < 1 || h >= pc) {
+            throw new IllegalArgumentException(
+                "Nombre de joueurs humains invalide : il doit etre entre 1 et " + (pc - 1) + ".");
+        }
+        return h;
+    }
+
+    private boolean isHumanSlot(int playerNumber) {
+        return playerNumber >= 1 && playerNumber <= humanSlots;
+    }
+
+    private void reset(
+            int newBoardSize,
+            List<Integer> newFleetSizes,
+            Integer requestedPlayerCount,
+            Boolean withAI,
+            Integer humanPlayers) {
         this.boardSize = Math.max(5, newBoardSize);
-        this.playerCount = players == 4 ? 4 : 2;
+        this.playerCount = normalizePlayerCount(requestedPlayerCount);
+        this.humanSlots = humanSlotsFromRequest(withAI, humanPlayers, this.playerCount);
+
         this.fleetSizes = newFleetSizes != null && !newFleetSizes.isEmpty()
             ? new ArrayList<>(newFleetSizes)
             : List.of(5, 4, 3, 3, 2);
@@ -174,8 +247,11 @@ public final class DuelGameService {
         }
 
         List<Player> playersList = new ArrayList<>(playerCount);
-        for (int i = 1; i <= playerCount; i++) {
+        for (int i = 1; i <= humanSlots; i++) {
             playersList.add(new Player("Joueur " + i, boardSize, fleetSizes));
+        }
+        for (int j = 1; j <= playerCount - humanSlots; j++) {
+            playersList.add(new AI("Ordinateur " + j, boardSize, fleetSizes));
         }
         game = new Game(boardSize, playersList);
         game.setState(GameState.PLACEMENT);
@@ -186,6 +262,7 @@ public final class DuelGameService {
         for (int i = 1; i <= playerCount; i++) {
             placedShipsByPlayer.put(i, new HashSet<>());
         }
+        advanceUntilHumanOrTerminal();
     }
 
     private void synchronizeApiStateFromGame() {
@@ -194,6 +271,13 @@ public final class DuelGameService {
             throw new IllegalArgumentException("L'API requiert une partie a 2 ou 4 joueurs");
         }
         this.playerCount = size;
+
+        humanSlots = 0;
+        for (Player p : game.getPlayers()) {
+            if (!p.isAI()) {
+                humanSlots++;
+            }
+        }
 
         Player current = game.getCurrentPlayer();
         currentPlayer = resolvePlayerNumber(current);
@@ -223,6 +307,24 @@ public final class DuelGameService {
             alive.add(!getPlayerById(p).hasLost());
         }
         return List.copyOf(alive);
+    }
+
+    private List<Boolean> computeAiPlayers() {
+        List<Boolean> ais = new ArrayList<>(playerCount);
+        for (int p = 1; p <= playerCount; p++) {
+            ais.add(getPlayerById(p).isAI());
+        }
+        return List.copyOf(ais);
+    }
+
+    /** Premier slot humain encore en jeu pour la vue client (hotseat sur poste unique). */
+    private int viewSlotForClients() {
+        for (int p = 1; p <= Math.min(humanSlots, playerCount); p++) {
+            if (!getPlayerById(p).hasLost()) {
+                return p;
+            }
+        }
+        return 1;
     }
 
     private Set<String> collectPlacedShipTypes(int playerNumber) {
@@ -265,6 +367,10 @@ public final class DuelGameService {
     private void validatePlacementRequest(PlaceShipRequest request) {
         ensurePhase(DuelPhase.PLACEMENT, "Impossible de placer des navires hors phase PLACEMENT");
         validatePlayer(request.player());
+        if (!isHumanSlot(request.player())) {
+            throw new IllegalArgumentException(
+                "L'ordinateur gere le placement pour les joueurs IA. Action refusee pour ce numero de joueur.");
+        }
         if (request.player() != currentPlayer) {
             throw new IllegalArgumentException("Ce n'est pas le tour de ce joueur pour le placement");
         }
@@ -319,9 +425,70 @@ public final class DuelGameService {
         return from;
     }
 
+    /**
+     * Joue les coups automatiques jusqu'à ce qu'un joueur humain doive décider ou la partie se termine.
+     */
+    private void advanceUntilHumanOrTerminal() {
+        int iterations = 0;
+        while (iterations++ < MAX_AUTOMATIC_AI_STEPS) {
+            if (phase == DuelPhase.GAME_OVER || game.isFinished()) {
+                return;
+            }
+
+            if (isHumanSlot(currentPlayer)) {
+                if (phase == DuelPhase.PLACEMENT) {
+                    return;
+                }
+                if (!getPlayerById(currentPlayer).hasLost()) {
+                    return;
+                }
+                currentPlayer = nextLivingPlayerCircular(currentPlayer);
+                continue;
+            }
+
+            Player current = getPlayerById(currentPlayer);
+            AI ai = (AI) current;
+
+            if (phase == DuelPhase.PLACEMENT) {
+                if (isFleetComplete(currentPlayer)) {
+                    advancePlacementTurn();
+                    continue;
+                }
+                String nextShip = nextMissingShipType(currentPlayer);
+                if (nextShip == null) {
+                    advancePlacementTurn();
+                    continue;
+                }
+                placeShipRandomly(currentPlayer, nextShip);
+                advancePlacementTurn();
+                continue;
+            }
+
+            if (phase == DuelPhase.BATTLE) {
+                return;
+            }
+
+            return;
+        }
+    }
+
+    private String nextMissingShipType(int player) {
+        Set<String> done = placedShipsByPlayer.get(player);
+        for (String shipType : FLEET.keySet()) {
+            if (!done.contains(shipType)) {
+                return shipType;
+            }
+        }
+        return null;
+    }
+
     private void validateFireRequest(FireRequest request) {
         ensurePhase(DuelPhase.BATTLE, "Le tir est disponible uniquement pendant la phase BATTLE");
         validatePlayer(request.player());
+        if (!isHumanSlot(request.player())) {
+            throw new IllegalArgumentException(
+                "L'ordinateur gere les tires des IA. Ce joueur ne peut pas utiliser cet endpoint.");
+        }
         if (request.player() != currentPlayer) {
             throw new IllegalArgumentException("Ce n'est pas le tour de ce joueur");
         }
@@ -397,7 +564,7 @@ public final class DuelGameService {
         return new ActionResponse(
             result,
             actionResultMessage(result),
-            getStateForPlayer(currentPlayer)
+            getStateForPlayer(viewSlotForClients())
         );
     }
 

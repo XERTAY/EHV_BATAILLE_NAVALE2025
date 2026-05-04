@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import BoardScene from './components/BoardScene'
 import GameSetupMenu from './components/GameSetupMenu'
@@ -27,6 +27,8 @@ const DEFAULT_SETUP = {
   humanPlayers: 2,
   withAI: false,
 }
+const AI_STEP_DELAY_MS = 500
+const IMPACT_FLASH_MS = 700
 
 function normalizeSetup(setup) {
   const playerCount = setup.playerCount === 4 ? 4 : 2
@@ -72,7 +74,7 @@ function saveLastSetupToStorage(setup) {
 function App() {
   const [screen, setScreen] = useState('menu')
   const [layoutSet, setLayoutSet] = useState('faceoff')
-  const [showCoordinates, setShowCoordinates] = useState(false)
+  const [showCoordinates, setShowCoordinates] = useState(true)
   const [waveMode, setWaveMode] = useState('gpu')
   const [benchmarkEnabled, setBenchmarkEnabled] = useState(false)
   const [statusMessage, setStatusMessage] = useState('Initialisation de la partie...')
@@ -88,7 +90,12 @@ function App() {
     listSavesAction,
     loadGameAction,
     saveGameAction,
+    runAiStepAction,
   } = useGameApi()
+  const aiStepLockRef = useRef(false)
+  const previousGameStateRef = useRef(null)
+  const impactClearTimerRef = useRef(null)
+  const [recentImpactsByBoard, setRecentImpactsByBoard] = useState({})
 
   useEffect(() => {
     const lastSetup = loadLastSetupFromStorage()
@@ -119,6 +126,10 @@ function App() {
   }, [layoutSet])
 
   const currentPlayer = gameState?.currentPlayer ?? 1
+  const currentIsAi = useMemo(
+    () => Array.isArray(gameState?.aiPlayers) && Boolean(gameState.aiPlayers[currentPlayer - 1]),
+    [gameState, currentPlayer],
+  )
   const gamePhase = gameState?.phase
   const boardSize = gameState?.boardSize ?? setup.boardSize ?? 10
   const boardStatesById = useMemo(() => {
@@ -135,6 +146,26 @@ function App() {
     const boardIndex = Math.min(Math.max(currentPlayer - 1, 0), boards.length - 1)
     return boards[boardIndex]?.boardId ?? 'A1'
   }, [boards, currentPlayer])
+  const clientOwnBoardId = useMemo(() => {
+    const own = gameState?.boards?.find((board) => board.ownBoard)
+    return own?.boardId ?? expectedOwnBoardId
+  }, [gameState, expectedOwnBoardId])
+  const aiBoardIds = useMemo(() => {
+    const ids = new Set()
+    if (!Array.isArray(gameState?.aiPlayers)) return ids
+    for (let i = 0; i < boards.length; i += 1) {
+      if (!gameState.aiPlayers[i]) continue
+      const boardId = boards[i]?.boardId
+      if (boardId) ids.add(boardId)
+    }
+    return ids
+  }, [boards, gameState])
+  const isDuelWithAi = useMemo(() => {
+    if (!Array.isArray(gameState?.aiPlayers)) return false
+    if ((gameState?.boards?.length ?? 0) !== 2) return false
+    const aiCount = gameState.aiPlayers.filter(Boolean).length
+    return aiCount === 1
+  }, [gameState])
   const numPlayersInState = gameState?.boards?.length ?? 0
   const {
     selectedShipType,
@@ -153,9 +184,33 @@ function App() {
     boardSize,
     fleetShipSizes: setup.fleetShipSizes,
   })
+  const turnOverlayLabel = useMemo(() => {
+    if (gamePhase === 'PLACEMENT') {
+      if (isDuelWithAi && !currentIsAi && remainingShips.length === 0) {
+        return "Placement de l'IA en cours..."
+      }
+      if (isDuelWithAi) {
+        return currentIsAi ? "Tour de l'IA - placement" : 'Votre tour - placement'
+      }
+      return `Tour du joueur ${currentPlayer} - placement`
+    }
+    if (gamePhase === 'BATTLE') {
+      if (isDuelWithAi) {
+        return currentIsAi ? "Tour de l'IA - tir" : 'Votre tour - tirez sur la grille adverse'
+      }
+      return currentIsAi ? `Tour de l'IA ${currentPlayer}` : `Tour du joueur ${currentPlayer}`
+    }
+    if (gamePhase === 'GAME_OVER') {
+      return gameState?.winner === 1 ? 'Victoire' : 'Defaite'
+    }
+    return currentIsAi ? "Tour de l'IA" : 'Votre tour'
+  }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, gameState?.winner, currentPlayer])
 
   const interactiveBoards = useMemo(() => {
     if (!gameState) return {}
+    if (currentIsAi) {
+      return {}
+    }
     if (gamePhase === 'PLACEMENT') {
       return { [expectedOwnBoardId]: true }
     }
@@ -172,7 +227,7 @@ function App() {
       if (boardId) next[boardId] = true
     }
     return next
-  }, [numPlayersInState, boards, gameState, gamePhase, currentPlayer, expectedOwnBoardId])
+  }, [numPlayersInState, boards, gameState, gamePhase, currentPlayer, expectedOwnBoardId, currentIsAi])
 
   const applySetupPatch = useCallback((patch) => {
     setSetup((current) => normalizeSetup({ ...current, ...patch }))
@@ -189,7 +244,13 @@ function App() {
         setLayoutSet(loaded?.boards?.length === 4 ? 'star4' : 'faceoff')
       } else {
         setLayoutSet(nextLayoutSet)
-        await bootstrapGame(effectiveSetup.boardSize, effectiveSetup.fleetShipSizes, effectiveSetup.playerCount)
+        await bootstrapGame(
+          effectiveSetup.boardSize,
+          effectiveSetup.fleetShipSizes,
+          effectiveSetup.playerCount,
+          effectiveSetup.withAI,
+          effectiveSetup.humanPlayers,
+        )
       }
       resetPlacement()
       setScreen('game')
@@ -222,6 +283,14 @@ function App() {
   const handleCellClick = useCallback(async ({ boardId, x, y, label }) => {
     if (loading || !gameState) return
     if (!interactiveBoards[boardId]) {
+      if (currentIsAi && gamePhase === 'PLACEMENT') {
+        setStatusMessage(`Tour du joueur automatique (${currentPlayer})...`)
+        return
+      }
+      if (currentIsAi && gamePhase === 'BATTLE') {
+        setStatusMessage(`Tour de l'ordinateur (${currentPlayer})...`)
+        return
+      }
       if (gamePhase === 'PLACEMENT') {
         setStatusMessage(`Joueur ${currentPlayer}: placez sur votre grille ${expectedOwnBoardId}.`)
       } else if (numPlayersInState > 2) {
@@ -294,11 +363,73 @@ function App() {
     placementOrientation,
     handlePlacementSuccess,
     fireAtAction,
+    currentIsAi,
   ])
 
   const onCellHover = useCallback((cellData) => {
     handleCellHover(cellData, expectedOwnBoardId)
   }, [handleCellHover, expectedOwnBoardId])
+
+  useEffect(() => {
+    if (screen !== 'game' || !isDuelWithAi || !gameState || loading || !currentIsAi || gamePhase !== 'BATTLE') return
+    if (aiStepLockRef.current) return
+    aiStepLockRef.current = true
+    setStatusMessage("Tour de l'IA...")
+    const timerId = window.setTimeout(async () => {
+      try {
+        await runAiStepAction()
+      } catch {
+        // L'erreur est geree dans le hook API.
+      } finally {
+        aiStepLockRef.current = false
+      }
+    }, AI_STEP_DELAY_MS)
+    return () => {
+      window.clearTimeout(timerId)
+      aiStepLockRef.current = false
+    }
+  }, [screen, isDuelWithAi, gameState, loading, currentIsAi, gamePhase, runAiStepAction])
+
+  useEffect(() => {
+    const previous = previousGameStateRef.current
+    previousGameStateRef.current = gameState
+    if (!gameState || !previous || gameState.phase !== 'BATTLE') return
+    const ownBoard = gameState.boards?.find((board) => board.ownBoard)
+    const previousOwnBoard = previous.boards?.find((board) => board.ownBoard)
+    if (!ownBoard?.cells || !previousOwnBoard?.cells) return
+
+    const impacts = []
+    for (let y = 0; y < ownBoard.cells.length; y += 1) {
+      const row = ownBoard.cells[y] ?? []
+      const previousRow = previousOwnBoard.cells[y] ?? []
+      for (let x = 0; x < row.length; x += 1) {
+        const nextCell = row[x]
+        const prevCell = previousRow[x]
+        if (nextCell === prevCell) continue
+        if (nextCell === 'MISS' || nextCell === 'HIT' || nextCell === 'SUNK') {
+          impacts.push({ x, y, type: nextCell })
+        }
+      }
+    }
+    if (impacts.length === 0) return
+
+    setRecentImpactsByBoard({ [ownBoard.boardId]: impacts })
+    const last = impacts[impacts.length - 1]
+    if (last.type === 'SUNK') {
+      setStatusMessage('Votre flotte a subi un coup critique (navire coule).')
+    } else if (last.type === 'HIT') {
+      setStatusMessage('Alerte: l’ennemi a touche votre grille.')
+    } else {
+      setStatusMessage("L'ennemi a tire sans toucher.")
+    }
+    if (impactClearTimerRef.current) {
+      window.clearTimeout(impactClearTimerRef.current)
+    }
+    impactClearTimerRef.current = window.setTimeout(() => {
+      setRecentImpactsByBoard({})
+      impactClearTimerRef.current = null
+    }, IMPACT_FLASH_MS)
+  }, [gameState])
 
   // --- WebSocket integration ---
   const { wsState, wsMessage, createGame, joinGame, send } = useWebSocketGame()
@@ -353,7 +484,7 @@ function App() {
         onOpenMenu={handleBackToMenu}
       />
       <div className="game-banner">
-        <div className="game-banner__summary">{gameSummary}</div>
+        <div className="game-banner__summary">{gameSummary} · Votre grille: {clientOwnBoardId}</div>
         <button type="button" className="game-banner__button" onClick={handleBackToMenu}>
           Retour au menu
         </button>
@@ -372,6 +503,11 @@ function App() {
       <div className="shot-feedback">
         {statusMessage} {loading ? 'Chargement...' : ''}
       </div>
+      {turnOverlayLabel && (
+        <div className="turn-banner">
+          {turnOverlayLabel}
+        </div>
+      )}
       {gamePhase === 'PLACEMENT' && (
         <div className="placement-panel">
           <div className="placement-panel__title">{`Placement manuel - Joueur ${currentPlayer}`}</div>
@@ -420,8 +556,12 @@ function App() {
       )}
       <BoardScene
         boards={boards}
+        aiBoardIds={aiBoardIds}
+        duelAiFocus={isDuelWithAi}
+        ownBoardId={clientOwnBoardId}
         boardSize={boardSize}
         boardStatesById={boardStatesById}
+        recentImpactsByBoard={recentImpactsByBoard}
         interactiveBoards={interactiveBoards}
         previewCells={placementPreview}
         previewBoardId={expectedOwnBoardId}

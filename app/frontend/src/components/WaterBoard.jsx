@@ -32,9 +32,11 @@ function WaterBoard({
   showTitle = true,
   showGrid = true,
   showWater = true,
+  showAiTag = false,
   interactive = true,
   cellStates = null,
   previewCells = [],
+  recentImpacts = [],
   onCellHover,
   ownBoard = false,
 }) {
@@ -104,6 +106,34 @@ function WaterBoard({
     })
   }, [previewCells, flipColumns, flipRows, cells, half, cellSize])
 
+  const revealedShipModelCells = useMemo(() => {
+    if (!cellStates) return null
+    if (ownBoard) return cellStates
+    let hasSunkCell = false
+    const masked = cellStates.map((row) => row.map((cell) => {
+      if (cell === 'SUNK') {
+        hasSunkCell = true
+        return 'SUNK'
+      }
+      return 'EMPTY'
+    }))
+    return hasSunkCell ? masked : null
+  }, [cellStates, ownBoard])
+
+  const projectedImpactCells = useMemo(() => {
+    if (!recentImpacts?.length) return []
+    return recentImpacts.map((impact, index) => {
+      const rawX = flipColumns ? cells - 1 - impact.x : impact.x
+      const rawY = flipRows ? impact.y : cells - 1 - impact.y
+      return {
+        key: `impact-${impact.x}-${impact.y}-${impact.type}-${index}`,
+        x: -half + (rawX + 0.5) * cellSize,
+        y: -half + (rawY + 0.5) * cellSize,
+        type: impact.type,
+      }
+    })
+  }, [recentImpacts, flipColumns, flipRows, cells, half, cellSize])
+
   useFrame(({ clock }) => {
     const t = clock.elapsedTime
     if (waveMode === 'gpu') return
@@ -167,7 +197,6 @@ function WaterBoard({
           <span className="board-title">{`Grille ${boardId}`}</span>
         </Html>
       )}
-
       {showCoordinates && (
         <>
           <GridLabelList
@@ -190,6 +219,12 @@ function WaterBoard({
       )}
 
       <group rotation-x={-Math.PI / 2}>
+        {showAiTag && (
+          <Html position={[0, 0, 0.12]} transform sprite>
+            <span className="board-ai-tag">IA</span>
+          </Html>
+        )}
+
         <mesh
           onPointerMove={onPointerMove}
           onPointerOut={() => {
@@ -237,16 +272,16 @@ function WaterBoard({
           </mesh>
         ))}
 
-        {ownBoard && (
+        {revealedShipModelCells && (
           <FleetShipMeshes
-            cellStates={cellStates}
+            cellStates={revealedShipModelCells}
             previewCells={previewCells}
             cells={cells}
             half={half}
             cellSize={cellSize}
             flipColumns={flipColumns}
             flipRows={flipRows}
-            showPreviewGhost={Boolean(previewCells?.length)}
+            showPreviewGhost={ownBoard && Boolean(previewCells?.length)}
           />
         )}
 
@@ -254,6 +289,17 @@ function WaterBoard({
           <mesh key={cell.key} position={[cell.x, cell.y, 0.06]}>
             <planeGeometry args={[cellSize * 0.88, cellSize * 0.88]} />
             <meshBasicMaterial color="#5fd4ff" transparent opacity={0.45} />
+          </mesh>
+        ))}
+
+        {projectedImpactCells.map((cell) => (
+          <mesh key={cell.key} position={[cell.x, cell.y, 0.07]}>
+            <planeGeometry args={[cellSize * 0.95, cellSize * 0.95]} />
+            <meshBasicMaterial
+              color={cell.type === 'SUNK' ? '#ff2d2d' : cell.type === 'HIT' ? '#ff9b2f' : '#8ccfff'}
+              transparent
+              opacity={0.9}
+            />
           </mesh>
         ))}
 

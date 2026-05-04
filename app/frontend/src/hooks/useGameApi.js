@@ -1,26 +1,35 @@
 import { useCallback, useState } from 'react'
-import { fireAt, getGameState, listSaves, loadGame, placeShip, resetGame, saveGame } from '../api/gameApi'
+import { fireAt, getGameState, listSaves, loadGame, placeShip, resetGame, runAiStep, saveGame } from '../api/gameApi'
 
 export default function useGameApi() {
   const [gameState, setGameState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const bootstrapGame = useCallback(async (boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2], playerCount = 2) => {
-    try {
-      setLoading(true)
-      setErrorMessage('')
-      await resetGame(boardSize, fleetShipSizes, playerCount)
-      const state = await getGameState(1)
-      setGameState(state)
-      return state
-    } catch (error) {
-      setErrorMessage(error.message)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const bootstrapGame = useCallback(
+    async (
+      boardSize = 10,
+      fleetShipSizes = [5, 4, 3, 3, 2],
+      playerCount = 2,
+      withAI = false,
+      humanPlayers = 2,
+    ) => {
+      try {
+        setLoading(true)
+        setErrorMessage('')
+        await resetGame(boardSize, fleetShipSizes, playerCount, withAI, humanPlayers)
+        const state = await getGameState(1)
+        setGameState(state)
+        return state
+      } catch (error) {
+        setErrorMessage(error.message)
+        throw error
+      } finally {
+        setLoading(false)
+      }
+    },
+    [],
+  )
 
   const placeShipAction = useCallback(async (payload) => {
     try {
@@ -78,6 +87,36 @@ export default function useGameApi() {
     }
   }, [])
 
+  const refreshStateAction = useCallback(async (player = 1) => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const state = await getGameState(player)
+      setGameState(state)
+      return state
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const runAiStepAction = useCallback(async () => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const state = await runAiStep()
+      setGameState(state)
+      return state
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const saveGameAction = useCallback(async (fileName) => {
     try {
       setLoading(true)
@@ -103,5 +142,7 @@ export default function useGameApi() {
     listSavesAction,
     loadGameAction,
     saveGameAction,
+    refreshStateAction,
+    runAiStepAction,
   }
 }
