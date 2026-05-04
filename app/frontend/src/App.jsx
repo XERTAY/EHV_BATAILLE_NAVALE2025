@@ -10,6 +10,13 @@ import useWebSocketGame from './hooks/useWebSocketGame'
 
 const LAST_SETUP_KEY = 'bataille-navale:last-setup'
 
+const BOARD_ID_TO_PLAYER = {
+  A1: 1,
+  B1: 2,
+  C1: 3,
+  D1: 4,
+}
+
 const DEFAULT_SETUP = {
   startMode: 'new',
   loadSaveFile: 'bataille-navale',
@@ -128,10 +135,7 @@ function App() {
     const boardIndex = Math.min(Math.max(currentPlayer - 1, 0), boards.length - 1)
     return boards[boardIndex]?.boardId ?? 'A1'
   }, [boards, currentPlayer])
-  const expectedTargetBoardId = useMemo(() => {
-    if (boards.length <= 1) return expectedOwnBoardId
-    return boards.find((board) => board.boardId !== expectedOwnBoardId)?.boardId ?? expectedOwnBoardId
-  }, [boards, expectedOwnBoardId])
+  const numPlayersInState = gameState?.boards?.length ?? 0
   const {
     selectedShipType,
     selectedShipLabel,
@@ -156,10 +160,19 @@ function App() {
       return { [expectedOwnBoardId]: true }
     }
     if (gamePhase !== 'BATTLE') return {}
-    return {
-      [expectedTargetBoardId]: true,
+    const alive = gameState.playersAlive
+    const n = Math.min(numPlayersInState, boards.length)
+    const next = {}
+    for (let i = 0; i < n; i += 1) {
+      const pid = i + 1
+      if (pid === currentPlayer) continue
+      const isAlive = !alive || alive[i] !== false
+      if (!isAlive) continue
+      const boardId = boards[i]?.boardId
+      if (boardId) next[boardId] = true
     }
-  }, [expectedTargetBoardId, expectedOwnBoardId, gameState, gamePhase])
+    return next
+  }, [numPlayersInState, boards, gameState, gamePhase, currentPlayer, expectedOwnBoardId])
 
   const applySetupPatch = useCallback((patch) => {
     setSetup((current) => normalizeSetup({ ...current, ...patch }))
@@ -171,11 +184,12 @@ function App() {
 
     try {
       setStatusMessage('Demarrage de la partie...')
-      setLayoutSet(nextLayoutSet)
       if (effectiveSetup.startMode === 'load') {
-        await loadGameAction(effectiveSetup.loadSaveFile)
+        const loaded = await loadGameAction(effectiveSetup.loadSaveFile)
+        setLayoutSet(loaded?.boards?.length === 4 ? 'star4' : 'faceoff')
       } else {
-        await bootstrapGame(effectiveSetup.boardSize, effectiveSetup.fleetShipSizes)
+        setLayoutSet(nextLayoutSet)
+        await bootstrapGame(effectiveSetup.boardSize, effectiveSetup.fleetShipSizes, effectiveSetup.playerCount)
       }
       resetPlacement()
       setScreen('game')
@@ -210,8 +224,10 @@ function App() {
     if (!interactiveBoards[boardId]) {
       if (gamePhase === 'PLACEMENT') {
         setStatusMessage(`Joueur ${currentPlayer}: placez sur votre grille ${expectedOwnBoardId}.`)
+      } else if (numPlayersInState > 2) {
+        setStatusMessage(`Joueur ${currentPlayer}: choisissez une grille adverse encore en jeu.`)
       } else {
-        setStatusMessage(`Joueur ${currentPlayer}: vous devez tirer sur la grille ${expectedTargetBoardId}.`)
+        setStatusMessage(`Joueur ${currentPlayer}: tirez sur la grille adverse.`)
       }
       return
     }
@@ -231,17 +247,24 @@ function App() {
         })
         handlePlacementSuccess(currentPlayer, selectedShipType)
         if (result.state.phase === 'BATTLE') {
-          setStatusMessage('Tous les navires sont places. Debut de la bataille, joueur 1.')
+          const n = result.state.boards?.length ?? 0
+          setStatusMessage(
+            n > 2
+              ? 'Tous les navires sont places. Debut de la bataille, joueur 1. Cliquez sur une grille adverse encore en jeu pour tirer.'
+              : 'Tous les navires sont places. Debut de la bataille, joueur 1.',
+          )
         } else {
           setStatusMessage(
             `Navire ${selectedShipLabel} place sur ${boardId} ${label}. Joueur ${result.state.currentPlayer} continue.`,
           )
         }
       } else if (gamePhase === 'BATTLE') {
+        const targetPlayer = BOARD_ID_TO_PLAYER[boardId]
         result = await fireAtAction({
           player: currentPlayer,
           x,
           y,
+          targetPlayer: numPlayersInState > 2 ? targetPlayer : undefined,
         })
         const targetLabel = `${boardId} ${label}`
         if (result.state.phase === 'GAME_OVER') {
@@ -263,7 +286,7 @@ function App() {
     gamePhase,
     currentPlayer,
     expectedOwnBoardId,
-    expectedTargetBoardId,
+    numPlayersInState,
     remainingShips.length,
     placeShipAction,
     selectedShipType,
@@ -397,7 +420,6 @@ function App() {
       )}
       <BoardScene
         boards={boards}
-        boardSize={boardSize}
         boardSize={boardSize}
         boardStatesById={boardStatesById}
         interactiveBoards={interactiveBoards}

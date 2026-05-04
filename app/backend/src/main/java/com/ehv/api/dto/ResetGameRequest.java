@@ -4,5 +4,6 @@ import java.util.List;
 
 public record ResetGameRequest(
     int boardSize,
-    List<Integer> fleetShipSizes
+    List<Integer> fleetShipSizes,
+    Integer playerCount
 ) {}

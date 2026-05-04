@@ -3,6 +3,13 @@ import { useCallback, useMemo, useState } from 'react'
 /** Libellés UI pour les tailles classiques ; au-delà, nom générique par index. */
 const DEFAULT_SHIP_LABELS = ['Porte-avions', 'Cuirassé', 'Croiseur', 'Sous-marin', 'Destroyer']
 
+const EMPTY_PLACED_BY_PLAYER = () => ({
+  1: [],
+  2: [],
+  3: [],
+  4: [],
+})
+
 /**
  * Flotte alignée sur le backend (`DuelGameService`) : types `SHIP_0`, `SHIP_1`, …
  */
@@ -27,7 +34,7 @@ export default function usePlacement({
   const [selectedShipType, setSelectedShipType] = useState('SHIP_0')
   const [placementOrientation, setPlacementOrientation] = useState('HORIZONTAL')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
-  const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState({ 1: [], 2: [] })
+  const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState(() => EMPTY_PLACED_BY_PLAYER())
 
   const remainingShips = useMemo(() => {
     const alreadyPlaced = new Set(placedShipsByPlayer[currentPlayer] ?? [])
@@ -67,12 +74,12 @@ export default function usePlacement({
     setHoveredPlacementCell(null)
     setPlacedShipsByPlayer((value) => ({
       ...value,
-      [player]: [...value[player], shipType],
+      [player]: [...(value[player] ?? []), shipType],
     }))
   }, [])
 
   const resetPlacement = useCallback(() => {
-    setPlacedShipsByPlayer({ 1: [], 2: [] })
+    setPlacedShipsByPlayer(EMPTY_PLACED_BY_PLAYER())
     setHoveredPlacementCell(null)
     setSelectedShipType(fleet[0]?.type ?? 'SHIP_0')
     setPlacementOrientation('HORIZONTAL')

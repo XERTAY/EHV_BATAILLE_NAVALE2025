@@ -6,11 +6,11 @@ export default function useGameApi() {
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const bootstrapGame = useCallback(async (boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2]) => {
+  const bootstrapGame = useCallback(async (boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2], playerCount = 2) => {
     try {
       setLoading(true)
       setErrorMessage('')
-      await resetGame(boardSize, fleetShipSizes)
+      await resetGame(boardSize, fleetShipSizes, playerCount)
       const state = await getGameState(1)
       setGameState(state)
       return state
