@@ -88,6 +88,7 @@ Terminal 1, depuis la racine du projet :
 
 ```
 mvn -pl app/backend -am spring-boot:run
+mvn -f app/backend/pom.xml spring-boot:run
 ```
 
 Le backend demarre en local sur `http://localhost:5183`.
