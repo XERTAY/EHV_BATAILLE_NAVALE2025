@@ -97,6 +97,24 @@
   background: rgba(43, 10, 10, 0.9);
 }
 
+.turn-banner {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 10px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(127, 228, 243, 0.9);
+  background: rgba(4, 18, 29, 0.82);
+  color: #ecfdff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
 .game-banner {
   position: absolute;
   top: 14px;
@@ -489,6 +507,23 @@
     0 0 20px rgba(0, 207, 255, 0.45);
 }
 
+.board-ai-tag {
+  color: rgba(255, 94, 94, 0.95);
+  font-size: 260px;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 10px;
+  transform: rotate(-35deg);
+  text-transform: uppercase;
+  opacity: 0.48;
+  text-shadow:
+    0 0 14px rgba(255, 68, 68, 0.7),
+    0 0 34px rgba(255, 68, 68, 0.35);
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 @media (max-width: 960px) {
   .menu-grid {
     grid-template-columns: 1fr;
@@ -514,6 +549,7 @@
 
   .shot-feedback,
   .shot-feedback--error,
+  .turn-banner,
   .placement-panel,
   .layout-controls,
   .game-banner,

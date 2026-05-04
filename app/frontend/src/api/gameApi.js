@@ -13,17 +13,31 @@ async function callApi(path, options = {}) {
   return response.json()
 }
 
-export function resetGame(boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2], playerCount = 2) {
+export function resetGame(
+  boardSize = 10,
+  fleetShipSizes = [5, 4, 3, 3, 2],
+  playerCount = 2,
+  withAI = false,
+  humanPlayers,
+) {
   const normalizedCount = playerCount === 4 ? 4 : 2
+  const body = {
+    boardSize: Math.max(5, Number(boardSize) || 10),
+    fleetShipSizes: Array.isArray(fleetShipSizes) && fleetShipSizes.length > 0
+      ? fleetShipSizes.map((size) => Math.max(1, Number(size) || 1))
+      : [5, 4, 3, 3, 2],
+    playerCount: normalizedCount,
+  }
+  if (withAI && humanPlayers != null) {
+    body.withAI = true
+    body.humanPlayers = Math.max(1, Math.min(Number(humanPlayers) || 1, normalizedCount - 1))
+  } else {
+    body.withAI = false
+    body.humanPlayers = null
+  }
   return callApi('/game/reset', {
     method: 'POST',
-    body: JSON.stringify({
-      boardSize: Math.max(5, Number(boardSize) || 10),
-      fleetShipSizes: Array.isArray(fleetShipSizes) && fleetShipSizes.length > 0
-        ? fleetShipSizes.map((size) => Math.max(1, Number(size) || 1))
-        : [5, 4, 3, 3, 2],
-      playerCount: normalizedCount,
-    }),
+    body: JSON.stringify(body),
   })
 }
 
@@ -50,6 +64,12 @@ export function fireAt(payload) {
   return callApi('/game/fire', {
     method: 'POST',
     body: JSON.stringify(body),
+  })
+}
+
+export function runAiStep() {
+  return callApi('/game/ai-step', {
+    method: 'POST',
   })
 }
 

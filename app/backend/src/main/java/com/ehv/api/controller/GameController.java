@@ -36,7 +36,9 @@ public class GameController {
             return duelGameService.resetAndGetState(
                 request.boardSize(),
                 request.fleetShipSizes(),
-                request.playerCount()
+                request.playerCount(),
+                request.withAI(),
+                request.humanPlayers()
             );
         }
         return duelGameService.resetAndGetState();
@@ -60,6 +62,11 @@ public class GameController {
     @PostMapping("/game/fire")
     public ActionResponse fire(@RequestBody FireRequest request) {
         return duelGameService.fireAt(request);
+    }
+
+    @PostMapping("/game/ai-step")
+    public GameStateResponse aiStep() {
+        return duelGameService.advanceAiSingleStepAndGetState();
     }
 
     @GetMapping("/game/saves")

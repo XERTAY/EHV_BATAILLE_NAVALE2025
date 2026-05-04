@@ -42,8 +42,12 @@ function PerformanceProbe({ enabled, waveMode }) {
 
 function BoardScene({
   boards,
+  aiBoardIds,
+  duelAiFocus = false,
+  ownBoardId = 'A1',
   boardSize = 10,
   boardStatesById,
+  recentImpactsByBoard,
   interactiveBoards,
   previewCells,
   previewBoardId,
@@ -53,9 +57,17 @@ function BoardScene({
   onCellHover,
   onCellClick,
 }) {
+  const focusBoard = boards.find((board) => board.boardId === ownBoardId) ?? boards[0]
+  const focusX = focusBoard?.position?.[0] ?? 0
+  const focusZ = focusBoard?.position?.[2] ?? 0
+  const focusDirection = focusZ >= 0 ? 1 : -1
+  const cameraPosition = duelAiFocus
+    ? [focusX, 150, focusZ + focusDirection * 170]
+    : [0, 150, 185]
+
   return (
     <Canvas
-      camera={{ position: [0, 150, 185], fov: 45 }}
+      camera={{ position: cameraPosition, fov: 45 }}
       gl={{
         antialias: true,
         toneMapping: ACESFilmicToneMapping,
@@ -88,6 +100,7 @@ function BoardScene({
           cells={boardSize}
           cellStates={boardStatesById?.[board.boardId]?.cells}
           ownBoard={Boolean(boardStatesById?.[board.boardId]?.ownBoard)}
+          recentImpacts={recentImpactsByBoard?.[board.boardId] ?? []}
           previewCells={board.boardId === previewBoardId ? previewCells : []}
           position={board.position}
           rotationY={board.rotationY}
@@ -99,6 +112,7 @@ function BoardScene({
           showWater={false}
           showGrid
           showTitle
+          showAiTag={Boolean(aiBoardIds?.has(board.boardId))}
           interactive={Boolean(interactiveBoards?.[board.boardId])}
           waveMode={waveMode}
           onCellHover={onCellHover}
@@ -106,11 +120,13 @@ function BoardScene({
         />
       ))}
       <OrbitControls
+        target={[focusX, 0, focusZ]}
         minDistance={115}
         maxDistance={380}
         minPolarAngle={0.62}
         maxPolarAngle={1.45}
         enablePan
+        enableRotate
       />
     </Canvas>
   )

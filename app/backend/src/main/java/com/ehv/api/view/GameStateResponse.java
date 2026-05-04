@@ -8,6 +8,7 @@ public record GameStateResponse(
     int currentPlayer,
     Integer winner,
     List<BoardStateView> boards,
-    List<Boolean> playersAlive
+    List<Boolean> playersAlive,
+    List<Boolean> aiPlayers
 ) {
 }

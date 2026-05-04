@@ -83,7 +83,7 @@ public class ConsoleMain {
                  Player currentPlayer = placementController.getCurrentPlayer();
 
                   if (currentPlayer instanceof AI) {
-                    ((AI) currentPlayer).placeFleet(placementController);
+                    ((AI) currentPlayer).placeFleetStandardTypes();
                       System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
                       System.out.println("\nGrille de " + currentPlayer.getName() + " après le placement :");
                       System.out.println(renderer.renderPlayerGrid(currentPlayer.getGrid()));
@@ -136,9 +136,10 @@ public class ConsoleMain {
             // Tour de l'IA : joue automatiquement
             if (current instanceof AI) {
                 AI ai = (AI) current;
-                Coordinate aiCoord = ai.chooseTarget();
+                int defenderNum = controller.getPlayers().indexOf(target) + 1;
+                Coordinate aiCoord = ai.chooseTargetForDefender(defenderNum);
                 ShotResult aiResult = controller.playShot(target, aiCoord.getX(), aiCoord.getY());
-                ai.handleShotResult(aiCoord, aiResult);
+                ai.handleShotResult(defenderNum, aiCoord, aiResult);
                 System.out.println("\n--- Tour de " + current.getName() + " ---");
                 System.out.println("Cible choisie : " + target.getName());
                 System.out.println(current.getName() + " tire en (" + (aiCoord.getX() + 1) + ", " + (aiCoord.getY() + 1) + ") : " + aiResult);
