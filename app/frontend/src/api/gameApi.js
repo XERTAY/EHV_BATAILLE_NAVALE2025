@@ -13,7 +13,8 @@ async function callApi(path, options = {}) {
   return response.json()
 }
 
-export function resetGame(boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2]) {
+export function resetGame(boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2], playerCount = 2) {
+  const normalizedCount = playerCount === 4 ? 4 : 2
   return callApi('/game/reset', {
     method: 'POST',
     body: JSON.stringify({
@@ -21,6 +22,7 @@ export function resetGame(boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2]) {
       fleetShipSizes: Array.isArray(fleetShipSizes) && fleetShipSizes.length > 0
         ? fleetShipSizes.map((size) => Math.max(1, Number(size) || 1))
         : [5, 4, 3, 3, 2],
+      playerCount: normalizedCount,
     }),
   })
 }
@@ -37,9 +39,17 @@ export function placeShip(payload) {
 }
 
 export function fireAt(payload) {
+  const body = {
+    player: payload.player,
+    x: payload.x,
+    y: payload.y,
+  }
+  if (payload.targetPlayer != null) {
+    body.targetPlayer = payload.targetPlayer
+  }
   return callApi('/game/fire', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
 }
 

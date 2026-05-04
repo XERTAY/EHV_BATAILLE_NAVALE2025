@@ -33,7 +33,11 @@ public class GameController {
     @PostMapping("/game/reset")
     public GameStateResponse reset(@RequestBody(required = false) ResetGameRequest request) {
         if (request != null && request.boardSize() > 0 && request.fleetShipSizes() != null && !request.fleetShipSizes().isEmpty()) {
-            return duelGameService.resetAndGetState(request.boardSize(), request.fleetShipSizes());
+            return duelGameService.resetAndGetState(
+                request.boardSize(),
+                request.fleetShipSizes(),
+                request.playerCount()
+            );
         }
         return duelGameService.resetAndGetState();
     }
