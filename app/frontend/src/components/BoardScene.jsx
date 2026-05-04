@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
+import { ACESFilmicToneMapping, SRGBColorSpace } from 'three'
 import { OrbitControls } from '@react-three/drei'
+import SceneEnvironment from './SceneEnvironment'
 import WaterBoard from './WaterBoard'
 
 function PerformanceProbe({ enabled, waveMode }) {
@@ -52,11 +54,18 @@ function BoardScene({
   onCellClick,
 }) {
   return (
-    <Canvas camera={{ position: [0, 150, 185], fov: 45 }}>
-      <color attach="background" args={['#06131f']} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[25, 40, 15]} intensity={1.1} />
-      <directionalLight position={[-30, 25, -10]} intensity={0.4} />
+    <Canvas
+      camera={{ position: [0, 150, 185], fov: 45 }}
+      gl={{
+        antialias: true,
+        toneMapping: ACESFilmicToneMapping,
+        toneMappingExposure: 1,
+        outputColorSpace: SRGBColorSpace,
+      }}
+    >
+      <color attach="background" args={['#0b1524']} />
+      <fog attach="fog" args={['#0b1524', 280, 2200]} />
+      <SceneEnvironment />
       <PerformanceProbe enabled={benchmarkEnabled} waveMode={waveMode} />
       <WaterBoard
         boardId="Ocean"
@@ -78,6 +87,7 @@ function BoardScene({
           boardId={board.boardId}
           cells={boardSize}
           cellStates={boardStatesById?.[board.boardId]?.cells}
+          ownBoard={Boolean(boardStatesById?.[board.boardId]?.ownBoard)}
           previewCells={board.boardId === previewBoardId ? previewCells : []}
           position={board.position}
           rotationY={board.rotationY}
