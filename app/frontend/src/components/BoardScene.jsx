@@ -5,6 +5,21 @@ import { OrbitControls } from '@react-three/drei'
 import SceneEnvironment from './SceneEnvironment'
 import WaterBoard from './WaterBoard'
 
+function cameraInFrontOfBoard(focusBoard) {
+  const focusX = focusBoard?.position?.[0] ?? 0
+  const focusZ = focusBoard?.position?.[2] ?? 0
+  const distance = 170
+  const cameraY = 150
+
+  if (Math.abs(focusX) > Math.abs(focusZ)) {
+    const directionX = focusX >= 0 ? 1 : -1
+    return [focusX + directionX * distance, cameraY, focusZ]
+  }
+
+  const directionZ = focusZ >= 0 ? 1 : -1
+  return [focusX, cameraY, focusZ + directionZ * distance]
+}
+
 function PerformanceProbe({ enabled, waveMode }) {
   const samplesRef = useRef([])
   const elapsedRef = useRef(0)
@@ -61,12 +76,9 @@ function BoardScene({
   const focusBoard = boards.find((board) => board.boardId === ownBoardId) ?? boards[0]
   const focusX = focusBoard?.position?.[0] ?? 0
   const focusZ = focusBoard?.position?.[2] ?? 0
-  const focusDirection = focusZ >= 0 ? 1 : -1
   const cameraPosition = decorativeOnly
     ? [0, 130, 230]
-    : duelAiFocus
-    ? [focusX, 150, focusZ + focusDirection * 170]
-    : [0, 150, 185]
+    : cameraInFrontOfBoard(focusBoard)
 
   return (
     <Canvas

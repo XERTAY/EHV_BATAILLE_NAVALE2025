@@ -6,7 +6,8 @@ function cellKey(x, y) {
 
 /**
  * Extrait des segments rectilignes (navires) à partir des états de cases.
- * Utilise une composante 4-voisins sur les cases SHIP / HIT / SUNK.
+ * On évite de fusionner des navires adjacents (cote a cote) en decomposant
+ * chaque composante en lignes droites successives.
  */
 export function extractShipSegments(cellStates, cells) {
   if (!cellStates?.length) return []
@@ -41,31 +42,82 @@ export function extractShipSegments(cellStates, cells) {
           stack.push([nx, ny])
         }
       }
+      const remaining = new Set(component.map(([px, py]) => cellKey(px, py)))
 
-      const xs = component.map(([px]) => px)
-      const ys = component.map(([, py]) => py)
-      const minX = Math.min(...xs)
-      const maxX = Math.max(...xs)
-      const minY = Math.min(...ys)
-      const maxY = Math.max(...ys)
-      const width = maxX - minX + 1
-      const height = maxY - minY + 1
-      const orientation = width >= height ? 'HORIZONTAL' : 'VERTICAL'
-      const length = Math.max(width, height)
-      const centerX = (minX + maxX) / 2
-      const centerY = (minY + maxY) / 2
+      while (remaining.size > 0) {
+        let bestRun = null
 
-      segments.push({
-        key: `ship-${minX}-${minY}-${maxX}-${maxY}-${length}`,
-        minX,
-        maxX,
-        minY,
-        maxY,
-        length,
-        orientation,
-        centerX,
-        centerY,
-      })
+        for (const key of remaining) {
+          const [xStr, yStr] = key.split(',')
+          const x = Number(xStr)
+          const y = Number(yStr)
+
+          let minX = x
+          let maxX = x
+          while (remaining.has(cellKey(minX - 1, y))) minX -= 1
+          while (remaining.has(cellKey(maxX + 1, y))) maxX += 1
+          const horizontalLength = maxX - minX + 1
+
+          let minY = y
+          let maxY = y
+          while (remaining.has(cellKey(x, minY - 1))) minY -= 1
+          while (remaining.has(cellKey(x, maxY + 1))) maxY += 1
+          const verticalLength = maxY - minY + 1
+
+          const horizontalCandidate = {
+            orientation: 'HORIZONTAL',
+            minX,
+            maxX,
+            minY: y,
+            maxY: y,
+            length: horizontalLength,
+          }
+          const verticalCandidate = {
+            orientation: 'VERTICAL',
+            minX: x,
+            maxX: x,
+            minY,
+            maxY,
+            length: verticalLength,
+          }
+
+          const localBest = horizontalLength >= verticalLength ? horizontalCandidate : verticalCandidate
+          if (!bestRun || localBest.length > bestRun.length) {
+            bestRun = localBest
+          }
+        }
+
+        if (!bestRun) break
+
+        const segmentCells = []
+        if (bestRun.orientation === 'HORIZONTAL') {
+          for (let sx = bestRun.minX; sx <= bestRun.maxX; sx += 1) {
+            segmentCells.push([sx, bestRun.minY])
+          }
+        } else {
+          for (let sy = bestRun.minY; sy <= bestRun.maxY; sy += 1) {
+            segmentCells.push([bestRun.minX, sy])
+          }
+        }
+
+        for (const [sx, sy] of segmentCells) {
+          remaining.delete(cellKey(sx, sy))
+        }
+
+        const centerX = (bestRun.minX + bestRun.maxX) / 2
+        const centerY = (bestRun.minY + bestRun.maxY) / 2
+        segments.push({
+          key: `ship-${bestRun.orientation}-${bestRun.minX}-${bestRun.minY}-${bestRun.maxX}-${bestRun.maxY}`,
+          minX: bestRun.minX,
+          maxX: bestRun.maxX,
+          minY: bestRun.minY,
+          maxY: bestRun.maxY,
+          length: bestRun.length,
+          orientation: bestRun.orientation,
+          centerX,
+          centerY,
+        })
+      }
     }
   }
 
