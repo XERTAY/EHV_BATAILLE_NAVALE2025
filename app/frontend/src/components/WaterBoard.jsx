@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import GridLabelList from './GridLabelList'
 import HoveredCellHighlight from './HoveredCellHighlight'
+import FleetShipMeshes from './FleetShipMeshes'
 import WaterShaderMaterial from './WaterShaderMaterial'
 import { getCellLabel, resolveCellFromEvent } from '../utils/boardMath'
 
@@ -35,6 +36,7 @@ function WaterBoard({
   cellStates = null,
   previewCells = [],
   onCellHover,
+  ownBoard = false,
 }) {
   const [hoveredCell, setHoveredCell] = useState(null)
   const geometryRef = useRef(null)
@@ -234,6 +236,19 @@ function WaterBoard({
             <meshBasicMaterial color={cell.color} transparent opacity={0.8} />
           </mesh>
         ))}
+
+        {ownBoard && (
+          <FleetShipMeshes
+            cellStates={cellStates}
+            previewCells={previewCells}
+            cells={cells}
+            half={half}
+            cellSize={cellSize}
+            flipColumns={flipColumns}
+            flipRows={flipRows}
+            showPreviewGhost={Boolean(previewCells?.length)}
+          />
+        )}
 
         {projectedPreviewCells.map((cell) => (
           <mesh key={cell.key} position={[cell.x, cell.y, 0.06]}>
