@@ -90,12 +90,22 @@ function App() {
     listSavesAction,
     loadGameAction,
     saveGameAction,
+    refreshStateAction,
+    syncStateAction,
     runAiStepAction,
   } = useGameApi()
   const aiStepLockRef = useRef(false)
   const previousGameStateRef = useRef(null)
   const impactClearTimerRef = useRef(null)
   const [recentImpactsByBoard, setRecentImpactsByBoard] = useState({})
+  const [lobbyState, setLobbyState] = useState({
+    inLobby: false,
+    isHost: false,
+    gameId: null,
+    players: 0,
+    maxPlayers: 0,
+    playerNumber: 1,
+  })
 
   useEffect(() => {
     const lastSetup = loadLastSetupFromStorage()
@@ -126,6 +136,8 @@ function App() {
   }, [layoutSet])
 
   const currentPlayer = gameState?.currentPlayer ?? 1
+  const localPlayerNumber = lobbyState?.inLobby ? (lobbyState.playerNumber ?? 1) : currentPlayer
+  const isLocalTurn = currentPlayer === localPlayerNumber
   const currentIsAi = useMemo(
     () => Array.isArray(gameState?.aiPlayers) && Boolean(gameState.aiPlayers[currentPlayer - 1]),
     [gameState, currentPlayer],
@@ -143,9 +155,9 @@ function App() {
 
   const expectedOwnBoardId = useMemo(() => {
     if (boards.length === 0) return 'A1'
-    const boardIndex = Math.min(Math.max(currentPlayer - 1, 0), boards.length - 1)
+    const boardIndex = Math.min(Math.max(localPlayerNumber - 1, 0), boards.length - 1)
     return boards[boardIndex]?.boardId ?? 'A1'
-  }, [boards, currentPlayer])
+  }, [boards, localPlayerNumber])
   const clientOwnBoardId = useMemo(() => {
     const own = gameState?.boards?.find((board) => board.ownBoard)
     return own?.boardId ?? expectedOwnBoardId
@@ -179,7 +191,7 @@ function App() {
     handleCellHover,
     resetPlacement,
   } = usePlacement({
-    currentPlayer,
+    currentPlayer: localPlayerNumber,
     gamePhase,
     boardSize,
     fleetShipSizes: setup.fleetShipSizes,
@@ -192,23 +204,27 @@ function App() {
       if (isDuelWithAi) {
         return currentIsAi ? "Tour de l'IA - placement" : 'Votre tour - placement'
       }
-      return `Tour du joueur ${currentPlayer} - placement`
+      return isLocalTurn ? 'Votre tour - placement' : `Tour du joueur ${currentPlayer} - placement`
     }
     if (gamePhase === 'BATTLE') {
       if (isDuelWithAi) {
         return currentIsAi ? "Tour de l'IA - tir" : 'Votre tour - tirez sur la grille adverse'
       }
-      return currentIsAi ? `Tour de l'IA ${currentPlayer}` : `Tour du joueur ${currentPlayer}`
+      if (currentIsAi) return `Tour de l'IA ${currentPlayer}`
+      return isLocalTurn ? 'Votre tour - tir' : `Tour du joueur ${currentPlayer}`
     }
     if (gamePhase === 'GAME_OVER') {
       return gameState?.winner === 1 ? 'Victoire' : 'Defaite'
     }
     return currentIsAi ? "Tour de l'IA" : 'Votre tour'
-  }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, gameState?.winner, currentPlayer])
+  }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, gameState?.winner, currentPlayer, isLocalTurn])
 
   const interactiveBoards = useMemo(() => {
     if (!gameState) return {}
     if (currentIsAi) {
+      return {}
+    }
+    if (lobbyState.inLobby && gamePhase === 'BATTLE' && !isLocalTurn) {
       return {}
     }
     if (gamePhase === 'PLACEMENT') {
@@ -220,14 +236,14 @@ function App() {
     const next = {}
     for (let i = 0; i < n; i += 1) {
       const pid = i + 1
-      if (pid === currentPlayer) continue
+      if (pid === localPlayerNumber) continue
       const isAlive = !alive || alive[i] !== false
       if (!isAlive) continue
       const boardId = boards[i]?.boardId
       if (boardId) next[boardId] = true
     }
     return next
-  }, [numPlayersInState, boards, gameState, gamePhase, currentPlayer, expectedOwnBoardId, currentIsAi])
+  }, [numPlayersInState, boards, gameState, gamePhase, expectedOwnBoardId, currentIsAi, lobbyState.inLobby, isLocalTurn, localPlayerNumber])
 
   const applySetupPatch = useCallback((patch) => {
     setSetup((current) => normalizeSetup({ ...current, ...patch }))
@@ -264,6 +280,14 @@ function App() {
       setStatusMessage(error?.message ? `Impossible de demarrer: ${error.message}` : 'Impossible de demarrer la partie.')
     }
   }, [setup, bootstrapGame, loadGameAction, resetPlacement])
+
+  const enterGameScreenWithState = useCallback((state, status) => {
+    const playerCountFromState = state?.boards?.length === 4 ? 4 : 2
+    setLayoutSet(playerCountFromState === 4 ? 'star4' : 'faceoff')
+    resetPlacement()
+    setScreen('game')
+    if (status) setStatusMessage(status)
+  }, [resetPlacement])
 
   const handleSaveCurrentGame = useCallback(async () => {
     try {
@@ -308,13 +332,13 @@ function App() {
           return
         }
         result = await placeShipAction({
-          player: currentPlayer,
+          player: localPlayerNumber,
           shipType: selectedShipType,
           x,
           y,
           orientation: placementOrientation,
         })
-        handlePlacementSuccess(currentPlayer, selectedShipType)
+        handlePlacementSuccess(localPlayerNumber, selectedShipType)
         if (result.state.phase === 'BATTLE') {
           const n = result.state.boards?.length ?? 0
           setStatusMessage(
@@ -330,7 +354,7 @@ function App() {
       } else if (gamePhase === 'BATTLE') {
         const targetPlayer = BOARD_ID_TO_PLAYER[boardId]
         result = await fireAtAction({
-          player: currentPlayer,
+          player: localPlayerNumber,
           x,
           y,
           targetPlayer: numPlayersInState > 2 ? targetPlayer : undefined,
@@ -354,6 +378,7 @@ function App() {
     interactiveBoards,
     gamePhase,
     currentPlayer,
+    localPlayerNumber,
     expectedOwnBoardId,
     numPlayersInState,
     remainingShips.length,
@@ -432,29 +457,85 @@ function App() {
   }, [gameState])
 
   // --- WebSocket integration ---
-  const { wsState, wsMessage, createGame, joinGame, send } = useWebSocketGame()
+  const { wsState, wsMessage, createGame, joinGame, startGame } = useWebSocketGame()
 
-  // Example: auto-create a game on mount (for demo)
-  useEffect(() => {
-    if (wsState.connected && !wsState.gameId) {
-      createGame(4) // or prompt user for number of players
+  const handleCreateLobby = useCallback((maxPlayers) => {
+    createGame(maxPlayers)
+  }, [createGame])
+
+  const handleJoinLobby = useCallback((gameId) => {
+    const trimmed = gameId?.trim()
+    if (!trimmed) return
+    joinGame(trimmed)
+  }, [joinGame])
+
+  const handleStartLobbyGame = useCallback(async () => {
+    if (!lobbyState.isHost || !lobbyState.gameId) return
+    try {
+      await handleStartGame()
+      startGame(lobbyState.gameId)
+    } catch {
+      // L'erreur est deja geree dans handleStartGame.
     }
-  }, [wsState.connected, wsState.gameId, createGame])
+  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, startGame])
 
   // Example: show WebSocket status
   useEffect(() => {
     if (wsMessage?.type === 'GAME_CREATED') {
       setStatusMessage(`Partie créée. ID: ${wsMessage.gameId}`)
+      setLobbyState({
+        inLobby: true,
+        isHost: true,
+        gameId: wsMessage.gameId ?? null,
+        players: wsMessage.players ?? 1,
+        maxPlayers: wsMessage.maxPlayers ?? setup.playerCount,
+        playerNumber: wsMessage.playerNumber ?? 1,
+      })
     } else if (wsMessage?.type === 'JOINED_GAME') {
       setStatusMessage(`Rejoint la partie. ID: ${wsMessage.gameId}`)
+      setLobbyState({
+        inLobby: true,
+        isHost: false,
+        gameId: wsMessage.gameId ?? null,
+        players: wsMessage.players ?? 1,
+        maxPlayers: wsMessage.maxPlayers ?? setup.playerCount,
+        playerNumber: wsMessage.playerNumber ?? 1,
+      })
+    } else if (wsMessage?.type === 'PLAYER_COUNT_UPDATED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        return {
+          ...current,
+          players: wsMessage.players ?? current.players,
+          maxPlayers: wsMessage.maxPlayers ?? current.maxPlayers,
+        }
+      })
+      setStatusMessage(`Lobby ${wsMessage.gameId}: ${wsMessage.players}/${wsMessage.maxPlayers} joueurs.`)
+    } else if (wsMessage?.type === 'GAME_STARTED') {
+      if (lobbyState.isHost) {
+        return
+      }
+      refreshStateAction(lobbyState.playerNumber ?? 1)
+        .then((state) => enterGameScreenWithState(state, 'Partie lancee par l hote.'))
+        .catch(() => setStatusMessage('Impossible de charger la partie demarree par l hote.'))
     } else if (wsMessage?.type === 'ERROR') {
       setStatusMessage(`Erreur WebSocket: ${wsMessage.message}`)
     }
-  }, [wsMessage])
+  }, [wsMessage, setup.playerCount, lobbyState.isHost, lobbyState.playerNumber, refreshStateAction, enterGameScreenWithState])
 
   const gameSummary = useMemo(() => {
     return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
   }, [setup])
+
+  useEffect(() => {
+    if (screen !== 'game' || !lobbyState.inLobby) return
+    const pollId = window.setInterval(() => {
+      syncStateAction(localPlayerNumber).catch(() => {
+        // Evite de casser l'UI en cas de latence/requete ratee.
+      })
+    }, 800)
+    return () => window.clearInterval(pollId)
+  }, [screen, lobbyState.inLobby, localPlayerNumber, syncStateAction])
 
   if (screen === 'menu') {
     return (
@@ -463,8 +544,13 @@ function App() {
         availableSaves={availableSaves}
         onChange={applySetupPatch}
         onStart={handleStartGame}
+        onStartLobbyGame={handleStartLobbyGame}
+        onCreateLobby={handleCreateLobby}
+        onJoinLobby={handleJoinLobby}
         onRefreshSaves={refreshSaves}
         loading={loading}
+        wsConnected={wsState.connected}
+        lobby={lobbyState}
         statusMessage={statusMessage}
       />
     )
@@ -477,7 +563,9 @@ function App() {
         onToggleCoordinates={() => setShowCoordinates((value) => !value)}
       />
       <div className="game-banner">
-        <div className="game-banner__summary">{gameSummary} · Votre grille: {clientOwnBoardId}</div>
+        <div className="game-banner__summary">
+          {gameSummary} · Vous etes joueur {localPlayerNumber} · Votre grille: {clientOwnBoardId}
+        </div>
         <button type="button" className="game-banner__button" onClick={handleBackToMenu}>
           Retour au menu
         </button>
@@ -500,7 +588,7 @@ function App() {
       )}
       {gamePhase === 'PLACEMENT' && (
         <div className="placement-panel">
-          <div className="placement-panel__title">{`Placement manuel - Joueur ${currentPlayer}`}</div>
+          <div className="placement-panel__title">{`Placement manuel - Joueur ${localPlayerNumber}`}</div>
           <div className="placement-panel__row">
             <label htmlFor="ship-select">Navire</label>
             <select

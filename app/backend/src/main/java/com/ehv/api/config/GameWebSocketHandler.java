@@ -1,5 +1,6 @@
 package com.ehv.api.config;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
 
@@ -51,6 +52,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         switch (type) {
             case "CREATE_GAME" -> handleCreateGame(session, msg);
             case "JOIN_GAME" -> handleJoinGame(session, msg);
+            case "START_GAME" -> handleStartGame(session, msg);
             default -> {
                 send(session, Map.of(
                     "type", "ERROR",
@@ -69,14 +71,15 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         int requested = msg.has("maxPlayers") ? msg.get("maxPlayers").getAsInt() : 4;
         int maxPlayers = Math.min(4, Math.max(2, requested));
 
-        GameSessionManager.GameSession game = sessionManager.createGame(maxPlayers);
+        GameSessionManager.GameSession game = sessionManager.createGame(maxPlayers, session);
         sessionManager.joinGame(game.getGameId(), session);
 
         send(session, Map.of(
             "type", "GAME_CREATED",
             "gameId", game.getGameId(),
             "players", game.getPlayerCount(),
-            "maxPlayers", game.getMaxPlayers()
+            "maxPlayers", game.getMaxPlayers(),
+            "playerNumber", game.getPlayerNumber(session)
         ));
     }
 
@@ -97,7 +100,8 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             "type", "JOINED_GAME",
             "gameId", game.getGameId(),
             "players", game.getPlayerCount(),
-            "maxPlayers", game.getMaxPlayers()
+            "maxPlayers", game.getMaxPlayers(),
+            "playerNumber", game.getPlayerNumber(session)
         );
         send(session, joinedPayload);
 
@@ -109,18 +113,68 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         ));
     }
 
+    private void handleStartGame(WebSocketSession session, JsonObject msg) throws Exception {
+        String gameId = msg.has("gameId") ? msg.get("gameId").getAsString() : null;
+        if (gameId == null || gameId.isBlank()) {
+            send(session, Map.of("type", "ERROR", "message", "Missing gameId."));
+            return;
+        }
+
+        GameSessionManager.GameSession game = sessionManager.getGame(gameId);
+        if (game == null) {
+            send(session, Map.of("type", "ERROR", "message", "Game not found."));
+            return;
+        }
+        if (!game.isHost(session)) {
+            send(session, Map.of("type", "ERROR", "message", "Only host can start the game."));
+            return;
+        }
+        if (game.getPlayerCount() < 2) {
+            send(session, Map.of("type", "ERROR", "message", "At least 2 players are required."));
+            return;
+        }
+
+        broadcastToGame(game, Map.of(
+            "type", "GAME_STARTED",
+            "gameId", game.getGameId(),
+            "players", game.getPlayerCount(),
+            "maxPlayers", game.getMaxPlayers()
+        ));
+    }
+
     private void broadcastToGame(GameSessionManager.GameSession game, Map<String, Object> payload) throws Exception {
         CharSequence serialized = Objects.requireNonNull(gson.toJson(payload));
         for (WebSocketSession playerSession : game.getPlayers()) {
             if (playerSession.isOpen()) {
-                playerSession.sendMessage(new TextMessage(serialized));
+                try {
+                    playerSession.sendMessage(new TextMessage(serialized));
+                } catch (IOException ignored) {
+                    sessionManager.leaveGame(playerSession);
+                    try {
+                        playerSession.close(CloseStatus.SERVER_ERROR);
+                    } catch (IOException ignoredClose) {
+                        // Ignore close failure: the socket is already broken.
+                    }
+                }
             }
         }
     }
 
     private void send(WebSocketSession session, Map<String, Object> payload) throws Exception {
         Objects.requireNonNull(session, "session");
+        if (!session.isOpen()) {
+            return;
+        }
         CharSequence serialized = Objects.requireNonNull(gson.toJson(payload));
-        session.sendMessage(new TextMessage(serialized));
+        try {
+            session.sendMessage(new TextMessage(serialized));
+        } catch (IOException ignored) {
+            sessionManager.leaveGame(session);
+            try {
+                session.close(CloseStatus.SERVER_ERROR);
+            } catch (IOException ignoredClose) {
+                // Ignore close failure: the socket is already broken.
+            }
+        }
     }
 }
