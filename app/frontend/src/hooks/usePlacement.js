@@ -1,32 +1,38 @@
 import { useCallback, useMemo, useState } from 'react'
 
-export const FLEET = [
-  { type: 'CARRIER', size: 5 },
-  { type: 'BATTLESHIP', size: 4 },
-  { type: 'CRUISER', size: 3 },
-  { type: 'SUBMARINE', size: 3 },
-  { type: 'DESTROYER', size: 2 },
-]
+/** Libellés UI pour les tailles classiques ; au-delà, nom générique par index. */
+const DEFAULT_SHIP_LABELS = ['Porte-avions', 'Cuirassé', 'Croiseur', 'Sous-marin', 'Destroyer']
 
-export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10, fleetShipSizes = [5, 4, 3, 3, 2] }) {
-  // Build dynamic fleet from fleetShipSizes
-  const FLEET = useMemo(() => {
-    const shipTypes = ['CARRIER', 'BATTLESHIP', 'CRUISER', 'SUBMARINE', 'DESTROYER']
-    return fleetShipSizes.map((size, index) => ({
-      type: `SHIP_${index}`, // Use unique type per size/position
-      size: Math.max(1, Number(size) || 1),
+/**
+ * Flotte alignée sur le backend (`DuelGameService`) : types `SHIP_0`, `SHIP_1`, …
+ */
+export default function usePlacement({
+  currentPlayer,
+  gamePhase,
+  boardSize = 10,
+  fleetShipSizes = [5, 4, 3, 3, 2],
+}) {
+  const fleet = useMemo(() => {
+    const sizes =
+      Array.isArray(fleetShipSizes) && fleetShipSizes.length > 0
+        ? fleetShipSizes
+        : [5, 4, 3, 3, 2]
+    return sizes.map((rawSize, index) => ({
+      type: `SHIP_${index}`,
+      size: Math.max(1, Number(rawSize) || 1),
+      label: DEFAULT_SHIP_LABELS[index] ?? `Navire ${index + 1}`,
     }))
   }, [fleetShipSizes])
 
-  const [selectedShipType, setSelectedShipType] = useState(FLEET[0]?.type ?? 'SHIP_0')
+  const [selectedShipType, setSelectedShipType] = useState('SHIP_0')
   const [placementOrientation, setPlacementOrientation] = useState('HORIZONTAL')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
   const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState({ 1: [], 2: [] })
 
   const remainingShips = useMemo(() => {
     const alreadyPlaced = new Set(placedShipsByPlayer[currentPlayer] ?? [])
-    return FLEET.filter((ship) => !alreadyPlaced.has(ship.type))
-  }, [placedShipsByPlayer, currentPlayer])
+    return fleet.filter((ship) => !alreadyPlaced.has(ship.type))
+  }, [placedShipsByPlayer, currentPlayer, fleet])
 
   const effectiveSelectedShipType = useMemo(() => {
     if (remainingShips.length === 0) return selectedShipType
@@ -35,9 +41,14 @@ export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10,
   }, [remainingShips, selectedShipType])
 
   const selectedShip = useMemo(
-    () => FLEET.find((ship) => ship.type === effectiveSelectedShipType) ?? FLEET[0],
-    [effectiveSelectedShipType],
+    () => fleet.find((ship) => ship.type === effectiveSelectedShipType) ?? fleet[0],
+    [fleet, effectiveSelectedShipType],
   )
+
+  const selectedShipLabel = useMemo(() => {
+    const ship = fleet.find((s) => s.type === effectiveSelectedShipType)
+    return ship?.label ?? effectiveSelectedShipType
+  }, [fleet, effectiveSelectedShipType])
 
   const placementPreview = useMemo(() => {
     if (!hoveredPlacementCell || !selectedShip || gamePhase !== 'PLACEMENT') return []
@@ -63,9 +74,9 @@ export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10,
   const resetPlacement = useCallback(() => {
     setPlacedShipsByPlayer({ 1: [], 2: [] })
     setHoveredPlacementCell(null)
-    setSelectedShipType(FLEET[0]?.type ?? 'SHIP_0')
+    setSelectedShipType(fleet[0]?.type ?? 'SHIP_0')
     setPlacementOrientation('HORIZONTAL')
-  }, [FLEET])
+  }, [fleet])
 
   const handleCellHover = useCallback((cellData, expectedOwnBoardId) => {
     if (!cellData) {
@@ -82,6 +93,7 @@ export default function usePlacement({ currentPlayer, gamePhase, boardSize = 10,
 
   return {
     selectedShipType: effectiveSelectedShipType,
+    selectedShipLabel,
     setSelectedShipType,
     placementOrientation,
     setPlacementOrientation,

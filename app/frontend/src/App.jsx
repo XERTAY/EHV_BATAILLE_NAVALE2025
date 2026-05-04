@@ -112,7 +112,7 @@ function App() {
 
   const currentPlayer = gameState?.currentPlayer ?? 1
   const gamePhase = gameState?.phase
-  const boardSize = gameState?.boardSize ?? setup.boardSize
+  const boardSize = gameState?.boardSize ?? setup.boardSize ?? 10
   const boardStatesById = useMemo(() => {
     const stateById = {}
     if (!gameState?.boards) return stateById
@@ -133,6 +133,7 @@ function App() {
   }, [boards, expectedOwnBoardId])
   const {
     selectedShipType,
+    selectedShipLabel,
     setSelectedShipType,
     placementOrientation,
     setPlacementOrientation,
@@ -232,7 +233,7 @@ function App() {
           setStatusMessage('Tous les navires sont places. Debut de la bataille, joueur 1.')
         } else {
           setStatusMessage(
-            `Navire ${selectedShipType} place sur ${boardId} ${label}. Joueur ${result.state.currentPlayer} continue.`,
+            `Navire ${selectedShipLabel} place sur ${boardId} ${label}. Joueur ${result.state.currentPlayer} continue.`,
           )
         }
       } else if (gamePhase === 'BATTLE') {
@@ -265,6 +266,7 @@ function App() {
     remainingShips.length,
     placeShipAction,
     selectedShipType,
+    selectedShipLabel,
     placementOrientation,
     handlePlacementSuccess,
     fireAtAction,
@@ -338,7 +340,7 @@ function App() {
             >
               {remainingShips.map((ship) => (
                 <option key={ship.type} value={ship.type}>
-                  {ship.type} ({ship.size})
+                  {ship.label} ({ship.size} cases)
                 </option>
               ))}
             </select>
@@ -361,7 +363,7 @@ function App() {
           </div>
           <div className="placement-panel__hint">
             {remainingShips.length > 0
-              ? `Cliquez sur la grille ${expectedOwnBoardId} pour poser ${selectedShipType}.`
+              ? `Cliquez sur la grille ${expectedOwnBoardId} pour poser ${selectedShipLabel}.`
               : `Tous les navires du joueur ${currentPlayer} sont poses.`}
           </div>
         </div>
