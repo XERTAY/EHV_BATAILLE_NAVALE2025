@@ -41,7 +41,7 @@ function PerformanceProbe({ enabled, waveMode }) {
 }
 
 function BoardScene({
-  boards,
+  boards = [],
   aiBoardIds,
   duelAiFocus = false,
   ownBoardId = 'A1',
@@ -56,12 +56,15 @@ function BoardScene({
   benchmarkEnabled,
   onCellHover,
   onCellClick,
+  decorativeOnly = false,
 }) {
   const focusBoard = boards.find((board) => board.boardId === ownBoardId) ?? boards[0]
   const focusX = focusBoard?.position?.[0] ?? 0
   const focusZ = focusBoard?.position?.[2] ?? 0
   const focusDirection = focusZ >= 0 ? 1 : -1
-  const cameraPosition = duelAiFocus
+  const cameraPosition = decorativeOnly
+    ? [0, 130, 230]
+    : duelAiFocus
     ? [focusX, 150, focusZ + focusDirection * 170]
     : [0, 150, 185]
 
@@ -93,7 +96,7 @@ function BoardScene({
         interactive={false}
         waveMode={waveMode}
       />
-      {boards.map((board) => (
+      {!decorativeOnly && boards.map((board) => (
         <WaterBoard
           key={board.boardId}
           boardId={board.boardId}
@@ -119,15 +122,17 @@ function BoardScene({
           onCellClick={onCellClick}
         />
       ))}
-      <OrbitControls
-        target={[focusX, 0, focusZ]}
-        minDistance={115}
-        maxDistance={380}
-        minPolarAngle={0.62}
-        maxPolarAngle={1.45}
-        enablePan
-        enableRotate
-      />
+      {!decorativeOnly && (
+        <OrbitControls
+          target={[focusX, 0, focusZ]}
+          minDistance={115}
+          maxDistance={380}
+          minPolarAngle={0.62}
+          maxPolarAngle={1.45}
+          enablePan
+          enableRotate
+        />
+      )}
     </Canvas>
   )
 }
