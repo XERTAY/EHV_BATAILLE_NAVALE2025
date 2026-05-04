@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import BoardScene from './BoardScene'
 
 function GameSetupMenu({
@@ -6,11 +6,18 @@ function GameSetupMenu({
   availableSaves,
   onChange,
   onStart,
+  onStartLobbyGame,
+  onCreateLobby,
+  onJoinLobby,
   onRefreshSaves,
   loading,
+  wsConnected,
+  lobby,
 }) {
   const [menuStep, setMenuStep] = useState('home')
   const [fleetModalOpen, setFleetModalOpen] = useState(false)
+  const [joinGameId, setJoinGameId] = useState('')
+  const [copyLabel, setCopyLabel] = useState('Copier l ID')
   const totalShipCells = useMemo(() => {
     return setup.fleetShipSizes.reduce((sum, size) => sum + Number(size || 0), 0)
   }, [setup.fleetShipSizes])
@@ -52,11 +59,49 @@ function GameSetupMenu({
     onChange({ startMode: 'new' })
     onStart()
   }
+  const launchLobbyGame = () => {
+    onChange({ startMode: 'new' })
+    onStartLobbyGame()
+  }
 
   const launchLoadGame = () => {
     onChange({ startMode: 'load' })
     onStart()
   }
+  const canLaunchFromLobby = Boolean(lobby?.inLobby && lobby?.players >= 2)
+  const canCopyGameId = Boolean(lobby?.gameId)
+  const isGuestInLobby = Boolean(lobby?.inLobby && !lobby?.isHost)
+  const isHostInLobby = Boolean(lobby?.inLobby && lobby?.isHost)
+
+  const handleCopyGameId = async () => {
+    if (!lobby?.gameId) return
+    try {
+      await navigator.clipboard.writeText(lobby.gameId)
+      setCopyLabel('ID copie')
+      window.setTimeout(() => setCopyLabel('Copier l ID'), 1200)
+    } catch {
+      setCopyLabel('Copie impossible')
+      window.setTimeout(() => setCopyLabel('Copier l ID'), 1200)
+    }
+  }
+
+  const openNewGameMenu = () => {
+    onChange({ startMode: 'new' })
+    setMenuStep('new')
+  }
+
+  useEffect(() => {
+    if (menuStep !== 'new' || !wsConnected) return
+    if (!lobby?.inLobby) {
+      onCreateLobby(setup.playerCount)
+      return
+    }
+    // Si l'hote modifie 2/4 joueurs avant que d'autres rejoignent,
+    // on recree le lobby pour appliquer la nouvelle capacite max.
+    if (lobby.isHost && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
+      onCreateLobby(setup.playerCount)
+    }
+  }, [menuStep, wsConnected, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
 
   return (
     <main className="menu-screen">
@@ -77,11 +122,26 @@ function GameSetupMenu({
       </div>
       <section className="menu-shell">
         <div className="menu-topbar">
-          {menuStep !== 'home' && (
-            <button type="button" className="menu-button menu-button--ghost" onClick={() => setMenuStep('home')}>
-              Retour
-            </button>
-          )}
+          <div className="menu-topbar__left">
+            {menuStep !== 'home' && (
+              <button type="button" className="menu-button menu-button--ghost" onClick={() => setMenuStep('home')}>
+                Retour
+              </button>
+            )}
+            {menuStep === 'new' && (
+              <div className="menu-topbar__lobby">
+                <span>ID: {lobby?.gameId ?? '---'}</span>
+                <button
+                  type="button"
+                  className="menu-button menu-button--secondary"
+                  onClick={handleCopyGameId}
+                  disabled={!canCopyGameId}
+                >
+                  {copyLabel}
+                </button>
+              </div>
+            )}
+          </div>
           <h1>Bataille Navale</h1>
         </div>
 
@@ -98,12 +158,55 @@ function GameSetupMenu({
 
         {menuStep === 'play' && (
           <div className="menu-stage menu-stage--play">
-            <button type="button" className="menu-main-cta" onClick={() => { onChange({ startMode: 'new' }); setMenuStep('new') }}>
+            <button type="button" className="menu-main-cta" onClick={openNewGameMenu}>
               Nouvelle partie
+            </button>
+            <button type="button" className="menu-main-cta menu-main-cta--secondary" onClick={() => setMenuStep('online')}>
+              Rejoindre une partie
             </button>
             <button type="button" className="menu-main-cta menu-main-cta--secondary" onClick={() => { onChange({ startMode: 'load' }); setMenuStep('load') }}>
               Charger une partie
             </button>
+          </div>
+        )}
+
+        {menuStep === 'online' && (
+          <div className="menu-stage menu-stage--panel">
+            <article className="menu-card">
+              <h2>Lobby en ligne</h2>
+              <p className="menu-start-note">
+                Etat WebSocket: {wsConnected ? 'connecte' : 'deconnecte'}
+              </p>
+              <div className="menu-field-group">
+                <label htmlFor="join-game-id">ID de la partie</label>
+                <input
+                  id="join-game-id"
+                  type="text"
+                  value={joinGameId}
+                  onChange={(event) => setJoinGameId(event.target.value)}
+                  placeholder="Collez l'ID ici"
+                />
+              </div>
+              <div className="menu-actions menu-actions--inline">
+                <button
+                  type="button"
+                  className="menu-button menu-button--secondary"
+                  onClick={() => onJoinLobby(joinGameId)}
+                  disabled={!wsConnected || !joinGameId.trim() || loading}
+                >
+                  Rejoindre
+                </button>
+              </div>
+
+              {lobby?.inLobby && (
+                <div className="menu-summary">
+                  <span>ID partie: {lobby.gameId}</span>
+                  <span>Joueurs: {lobby.players}/{lobby.maxPlayers}</span>
+                  <span>{lobby.isHost ? 'Vous etes l hote' : 'Vous avez rejoint une partie'}</span>
+                  {!lobby.isHost && <span>En attente du lancement par l hote...</span>}
+                </div>
+              )}
+            </article>
           </div>
         )}
 
@@ -230,14 +333,35 @@ function GameSetupMenu({
                     Modifier la flotte
                   </button>
                 </div>
+                <div className="menu-summary">
+                  <span>Joueurs: {lobby?.players ?? 0}/{lobby?.maxPlayers ?? setup.playerCount}</span>
+                </div>
               </article>
             </div>
           </div>
         )}
 
         <div className="menu-footer">
-          {menuStep === 'new' && (
-            <button type="button" className="menu-button menu-button--primary" onClick={launchNewGame} disabled={!canStart}>
+          {menuStep === 'new' && !isGuestInLobby && (
+            <button
+              type="button"
+              className="menu-button menu-button--primary"
+              onClick={isHostInLobby ? launchLobbyGame : launchNewGame}
+              disabled={isHostInLobby ? (!canStart || !canLaunchFromLobby) : !canStart}
+            >
+              Lancer la partie
+            </button>
+          )}
+          {menuStep === 'new' && isGuestInLobby && (
+            <div className="menu-start-note">En attente du lancement par l hote...</div>
+          )}
+          {menuStep === 'online' && lobby?.inLobby && lobby?.isHost && (
+            <button
+              type="button"
+              className="menu-button menu-button--primary"
+              onClick={launchLobbyGame}
+              disabled={!canStart || !canLaunchFromLobby}
+            >
               Lancer la partie
             </button>
           )}

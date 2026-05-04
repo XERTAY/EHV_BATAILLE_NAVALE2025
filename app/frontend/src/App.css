@@ -275,6 +275,26 @@
   gap: 12px;
 }
 
+.menu-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.menu-topbar__lobby {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 172, 116, 0.36);
+  background: rgba(51, 31, 19, 0.68);
+  color: #f7e2bf;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .menu-topbar h1 {
   margin: 0;
   color: #f8e4c6;
@@ -622,5 +642,13 @@
 
   .menu-topbar h1 {
     font-size: 26px;
+  }
+
+  .menu-topbar__left {
+    flex-wrap: wrap;
+  }
+
+  .menu-topbar__lobby {
+    white-space: normal;
   }
 }

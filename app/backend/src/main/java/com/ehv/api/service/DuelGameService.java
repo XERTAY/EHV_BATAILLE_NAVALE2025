@@ -50,6 +50,7 @@ public final class DuelGameService {
     private int currentPlayer;
     private Integer winner;
     private final Map<Integer, Set<String>> placedShipsByPlayer = new LinkedHashMap<>();
+    private final List<Integer> placementCompletionOrder = new ArrayList<>();
 
     public DuelGameService() {
         reset(10, List.of(5, 4, 3, 3, 2), null, false, null);
@@ -97,9 +98,9 @@ public final class DuelGameService {
         String shipType = normalizeShipType(request.shipType());
         placeShipOnBoard(request, shipType);
         placedShipsByPlayer.get(request.player()).add(shipType);
-        advancePlacementTurn();
+        updatePlacementProgress(request.player());
         advanceUntilHumanOrTerminal();
-        return buildActionResponse(ActionResult.PLACED);
+        return buildActionResponse(ActionResult.PLACED, request.player());
     }
 
     public synchronized ActionResponse fireAt(FireRequest request) {
@@ -111,7 +112,7 @@ public final class DuelGameService {
         ShotResult shotResult = game.shoot(shooter, targetPlayer, target);
         updateStateAfterShot(shotResult);
         advanceUntilHumanOrTerminal();
-        return buildActionResponse(actionResultFromShot(shotResult));
+        return buildActionResponse(actionResultFromShot(shotResult), request.player());
     }
 
     public synchronized GameStateResponse advanceAiSingleStepAndGetState() {
@@ -259,6 +260,7 @@ public final class DuelGameService {
         currentPlayer = 1;
         winner = null;
         placedShipsByPlayer.clear();
+        placementCompletionOrder.clear();
         for (int i = 1; i <= playerCount; i++) {
             placedShipsByPlayer.put(i, new HashSet<>());
         }
@@ -296,6 +298,7 @@ public final class DuelGameService {
         }
 
         placedShipsByPlayer.clear();
+        placementCompletionOrder.clear();
         for (int p = 1; p <= playerCount; p++) {
             placedShipsByPlayer.put(p, collectPlacedShipTypes(p));
         }
@@ -371,8 +374,8 @@ public final class DuelGameService {
             throw new IllegalArgumentException(
                 "L'ordinateur gere le placement pour les joueurs IA. Action refusee pour ce numero de joueur.");
         }
-        if (request.player() != currentPlayer) {
-            throw new IllegalArgumentException("Ce n'est pas le tour de ce joueur pour le placement");
+        if (isFleetComplete(request.player())) {
+            throw new IllegalArgumentException("Tous les navires de ce joueur sont deja places");
         }
     }
 
@@ -395,7 +398,10 @@ public final class DuelGameService {
         player.getFleet().addShip(ship);
     }
 
-    private void advancePlacementTurn() {
+    private void updatePlacementProgress(int player) {
+        if (isFleetComplete(player) && !placementCompletionOrder.contains(player)) {
+            placementCompletionOrder.add(player);
+        }
         boolean allDone = true;
         for (int p = 1; p <= playerCount; p++) {
             if (!isFleetComplete(p)) {
@@ -403,26 +409,12 @@ public final class DuelGameService {
                 break;
             }
         }
-        if (allDone) {
-            game.setState(GameState.PLAYING);
-            phase = DuelPhase.BATTLE;
-            currentPlayer = 1;
+        if (!allDone) {
             return;
         }
-        if (isFleetComplete(currentPlayer)) {
-            currentPlayer = nextPlayerNeedingPlacement(currentPlayer);
-        }
-    }
-
-    private int nextPlayerNeedingPlacement(int from) {
-        int p = from;
-        for (int step = 0; step < playerCount; step++) {
-            p = (p % playerCount) + 1;
-            if (!isFleetComplete(p)) {
-                return p;
-            }
-        }
-        return from;
+        game.setState(GameState.PLAYING);
+        phase = DuelPhase.BATTLE;
+        currentPlayer = placementCompletionOrder.isEmpty() ? 1 : placementCompletionOrder.get(0);
     }
 
     /**
@@ -451,16 +443,16 @@ public final class DuelGameService {
 
             if (phase == DuelPhase.PLACEMENT) {
                 if (isFleetComplete(currentPlayer)) {
-                    advancePlacementTurn();
+                    updatePlacementProgress(currentPlayer);
                     continue;
                 }
                 String nextShip = nextMissingShipType(currentPlayer);
                 if (nextShip == null) {
-                    advancePlacementTurn();
+                    updatePlacementProgress(currentPlayer);
                     continue;
                 }
                 placeShipRandomly(currentPlayer, nextShip);
-                advancePlacementTurn();
+                updatePlacementProgress(currentPlayer);
                 continue;
             }
 
@@ -560,11 +552,11 @@ public final class DuelGameService {
         };
     }
 
-    private ActionResponse buildActionResponse(ActionResult result) {
+    private ActionResponse buildActionResponse(ActionResult result, int viewerPlayer) {
         return new ActionResponse(
             result,
             actionResultMessage(result),
-            getStateForPlayer(viewSlotForClients())
+            getStateForPlayer(viewerPlayer)
         );
     }
 

@@ -117,6 +117,12 @@ export default function useGameApi() {
     }
   }, [])
 
+  const syncStateAction = useCallback(async (player = 1) => {
+    const state = await getGameState(player)
+    setGameState(state)
+    return state
+  }, [])
+
   const saveGameAction = useCallback(async (fileName) => {
     try {
       setLoading(true)
@@ -143,6 +149,7 @@ export default function useGameApi() {
     loadGameAction,
     saveGameAction,
     refreshStateAction,
+    syncStateAction,
     runAiStepAction,
   }
 }

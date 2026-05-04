@@ -21,9 +21,10 @@ function useWebSocketGame() {
 
   const createGame = (maxPlayers = 4) => wsClient.send({ type: 'CREATE_GAME', maxPlayers })
   const joinGame = (gameId) => wsClient.send({ type: 'JOIN_GAME', gameId })
+  const startGame = (gameId) => wsClient.send({ type: 'START_GAME', gameId })
   const send = (obj) => wsClient.send(obj)
 
-  return { wsState, wsMessage, createGame, joinGame, send }
+  return { wsState, wsMessage, createGame, joinGame, startGame, send }
 }
 
 export default useWebSocketGame

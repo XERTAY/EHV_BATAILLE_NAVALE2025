@@ -17,9 +17,9 @@ public class GameSessionManager {
     // Map sessionId -> gameId
     private final Map<String, String> playerToGame = new ConcurrentHashMap<>();
 
-    public GameSession createGame(int maxPlayers) {
+    public GameSession createGame(int maxPlayers, WebSocketSession hostSession) {
         String gameId = UUID.randomUUID().toString();
-        GameSession session = new GameSession(gameId, maxPlayers);
+        GameSession session = new GameSession(gameId, maxPlayers, hostSession.getId());
         games.put(gameId, session);
         return session;
     }
@@ -64,11 +64,13 @@ public class GameSessionManager {
     public static class GameSession {
         private final String gameId;
         private final int maxPlayers;
+        private final String hostSessionId;
         private final List<WebSocketSession> players = Collections.synchronizedList(new ArrayList<>());
 
-        public GameSession(String gameId, int maxPlayers) {
+        public GameSession(String gameId, int maxPlayers, String hostSessionId) {
             this.gameId = gameId;
             this.maxPlayers = maxPlayers;
+            this.hostSessionId = hostSessionId;
         }
 
         public boolean addPlayer(WebSocketSession session) {
@@ -106,6 +108,24 @@ public class GameSessionManager {
 
         public String getGameId() {
             return gameId;
+        }
+
+        public boolean isHost(WebSocketSession session) {
+            return session != null && hostSessionId.equals(session.getId());
+        }
+
+        public int getPlayerNumber(WebSocketSession session) {
+            if (session == null) {
+                return -1;
+            }
+            synchronized (players) {
+                for (int i = 0; i < players.size(); i++) {
+                    if (players.get(i).getId().equals(session.getId())) {
+                        return i + 1;
+                    }
+                }
+            }
+            return -1;
         }
     }
 }
