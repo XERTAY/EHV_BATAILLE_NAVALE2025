@@ -473,15 +473,8 @@ function App() {
   return (
     <main className="app-root">
       <LayoutControls
-        layoutSet={layoutSet}
         showCoordinates={showCoordinates}
-        waveMode={waveMode}
-        benchmarkEnabled={benchmarkEnabled}
-        onLayoutChange={setLayoutSet}
         onToggleCoordinates={() => setShowCoordinates((value) => !value)}
-        onToggleWaveMode={() => setWaveMode((value) => (value === 'gpu' ? 'cpu' : 'gpu'))}
-        onToggleBenchmark={() => setBenchmarkEnabled((value) => !value)}
-        onOpenMenu={handleBackToMenu}
       />
       <div className="game-banner">
         <div className="game-banner__summary">{gameSummary} · Votre grille: {clientOwnBoardId}</div>
@@ -499,9 +492,6 @@ function App() {
         <button type="button" className="menu-button menu-button--secondary" onClick={handleSaveCurrentGame} disabled={loading}>
           Enregistrer la partie
         </button>
-      </div>
-      <div className="shot-feedback">
-        {statusMessage} {loading ? 'Chargement...' : ''}
       </div>
       {turnOverlayLabel && (
         <div className="turn-banner">
