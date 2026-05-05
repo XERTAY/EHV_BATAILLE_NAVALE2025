@@ -5,12 +5,12 @@ WORKDIR /workspace
 COPY pom.xml ./pom.xml
 COPY app/backend/pom.xml ./app/backend/pom.xml
 COPY app/backend/src ./app/backend/src
-RUN mvn -pl app/backend -am clean package -DskipTests
+RUN mvn -pl app/backend -am clean package spring-boot:repackage -DskipTests
 
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-COPY --from=build /workspace/app/backend/target/*.jar /app/app.jar
+COPY --from=build /workspace/app/backend/target/backend-*.jar /app/app.jar
 
 EXPOSE 4784
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
