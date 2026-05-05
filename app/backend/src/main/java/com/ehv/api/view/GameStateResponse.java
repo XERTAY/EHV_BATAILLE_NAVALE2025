@@ -7,6 +7,8 @@ public record GameStateResponse(
     DuelPhase phase,
     int currentPlayer,
     Integer winner,
-    List<BoardStateView> boards
+    List<BoardStateView> boards,
+    List<Boolean> playersAlive,
+    List<Boolean> aiPlayers
 ) {
 }

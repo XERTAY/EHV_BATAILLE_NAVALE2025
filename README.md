@@ -78,7 +78,6 @@ make run
 ## Lancer backend et frontend en local (tests)
 
 ### Prerequis
-
 - Java 17+
 - Maven 3.9+
 - Node.js 20+ et npm
@@ -89,9 +88,10 @@ Terminal 1, depuis la racine du projet :
 
 ```
 mvn -pl app/backend -am spring-boot:run
+mvn -f app/backend/pom.xml spring-boot:run
 ```
 
-Le backend demarre en local sur `http://localhost:5183`.
+Le backend demarre en local sur `http://localhost:4784`.
 
 ### 2) Demarrer le frontend (Vite)
 
@@ -103,13 +103,61 @@ npm install
 npm run dev
 ```
 
-Le frontend demarre en local sur `http://localhost:5173`.
+Le frontend demarre en local sur `http://localhost:2462`.
 
 ### 3) Tests locaux
-
 - Garder les deux serveurs demarres (backend + frontend)
 - Ouvrir l'URL du frontend dans le navigateur
 - Verifier les appels au backend depuis l'interface (DevTools > Network)
+
+## WebSocket multijoueur (concurrent, 2 a 4 joueurs)
+
+### Endpoint
+
+- URL: `ws://localhost:4784/ws/game`
+- Origine frontend autorisee: `http://localhost:2462`
+
+### Principe
+
+- Chaque client ouvre une connexion WebSocket.
+- Le backend envoie immediatement `CONNECTED` avec un `sessionId`.
+- Un client peut creer une partie (`CREATE_GAME`) ou rejoindre une partie existante (`JOIN_GAME`).
+- Plusieurs parties peuvent tourner en parallele (isolation par `gameId`).
+- Chaque partie accepte entre 2 et 4 joueurs (`maxPlayers`).
+
+### Messages client -> serveur
+
+Creation de partie:
+
+```json
+{
+	"type": "CREATE_GAME",
+	"maxPlayers": 4
+}
+```
+
+Rejoindre une partie:
+
+```json
+{
+	"type": "JOIN_GAME",
+	"gameId": "<game-id>"
+}
+```
+
+### Messages serveur -> client
+
+- `CONNECTED`: connexion ouverte + `sessionId`
+- `GAME_CREATED`: partie creee (`gameId`, `players`, `maxPlayers`)
+- `JOINED_GAME`: joueur ajoute a la partie (`gameId`, `players`, `maxPlayers`)
+- `PLAYER_COUNT_UPDATED`: broadcast aux joueurs de la partie quand le nombre de joueurs change
+- `ERROR`: erreur de protocole (JSON invalide, type inconnu, partie introuvable/pleine, etc.)
+
+### Notes d'isolement
+
+- Les evenements sont scopes par partie (pas de fuite entre parties).
+- Le backend ne diffuse pas les placements adverses: chaque client ne doit recevoir que les informations autorisees par la logique de jeu.
+- La logique de coups/etat de bataille en WebSocket peut etre ajoutee ensuite sur la meme base (`type` de message + validation serveur).
 
 ## Sauvegarde / chargement (mode console)
 
@@ -120,11 +168,130 @@ Au démarrage, avant le placement, vous pouvez choisir :
 
 Pendant une partie, vous pouvez utiliser :
 
-- `save [chemin]` : sauvegarde la partie courante (par défaut `saves/bataille-navale.save`)
+- `save [nom]` : sauvegarde la partie courante dans `saves/[nom].save` (par défaut `saves/bataille-navale.save`)
+
+Exemple :
+
+```
+save partie1
+```
+Sauvegarde dans `saves/partie1.save`
+
+Le format de sauvegarde est désormais JSON (lisible et modifiable), au lieu du format binaire Java.
 
 ou bien après compilation :
 
 ```
 javac -d .src/**/*.java
+```
+
+## Déploiement VPS avec Docker
+
+### Pré-requis VPS (Debian déjà configuré)
+
+Cette section part du principe que :
+- Debian est déjà configuré sur le VPS
+- Docker est déjà installé et fonctionnel
+
+Vérifications minimales :
+
+```bash
+docker --version
+docker compose version
+```
+
+Si `docker compose` n'est pas disponible, installer le plugin compose :
+
+```bash
+sudo apt update
+sudo apt install -y docker-compose-plugin
+```
+
+### Préparation serveur
+
+- Ouvrir au minimum le port `2462` dans le firewall du VPS.
+- Si vous utilisez un nom de domaine, pointer le DNS vers l'IP du VPS.
+- Pour de la production Internet, prévoir ensuite HTTPS (port `443` + certificat TLS).
+
+#### Ouvrir les ports sur un VPS Debian
+
+Si `ufw` est installé :
+
+```bash
+sudo ufw allow 2462/tcp
+sudo ufw allow 443/tcp
+sudo ufw status
+```
+
+Si `ufw` n'est pas installé (installation rapide) :
+
+```bash
+sudo apt update
+sudo apt install -y ufw
+sudo ufw allow OpenSSH
+sudo ufw allow 2462/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+sudo ufw status
+```
+
+### Déploiement initial
+
+```bash
+git clone <URL_DU_REPO> bataille-navale
+cd bataille-navale
+docker compose up -d --build
+```
+
+Le frontend est servi sur `http://IP_DU_VPS` (ou `http://votre-domaine`).
+
+### Commandes ON/OFF et exploitation
+
+- Démarrer (ON): `docker compose up -d --build`
+- Arrêter (OFF): `docker compose down`
+- Statut: `docker compose ps`
+- Logs en continu: `docker compose logs -f`
+- Redémarrer un service: `docker compose restart frontend` ou `docker compose restart backend`
+
+### Mise à jour applicative
+
+Depuis le dossier du projet sur le VPS :
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+### Dépannage rapide
+
+- Si l'application ne répond pas : `docker compose ps` puis `docker compose logs -f`.
+- Si le port `2462` est occupé, changer le mapping avec une variable:
+
+```bash
+FRONTEND_PORT=3000 docker compose up -d --build
+```
+
+- Si un conteneur redémarre en boucle, inspecter ses logs :
+  - `docker compose logs -f backend`
+  - `docker compose logs -f frontend`
+
+### URL à utiliser dans le navigateur
+
+Depuis le web, l'URL d'accès est :
+
+```text
+http://IP_PUBLIQUE_DU_VPS:2462
+```
+
+Exemple :
+
+```text
+http://203.0.113.10:2462
+```
+
+Pour récupérer l'IP publique directement sur le VPS :
+
+```bash
+curl ifconfig.me
 ```
 

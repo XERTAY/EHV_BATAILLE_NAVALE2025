@@ -9,6 +9,7 @@ import com.ehv.battleship.model.Ship;
 import com.ehv.battleship.model.ShipOrientation;
 import com.ehv.battleship.model.ShotResult;
 import com.ehv.battleship.model.AI;
+import com.ehv.battleship.model.ShootDecision;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -303,28 +304,26 @@ public class GameController {
 
     AI ai = (AI) current;
 
-    ai.autoPlaceFleet(this);
+    ai.placeFleetStandardTypes();
 }
 
 // Méthode pour que l'IA choisisse sa cible et joue son coup
     public Coordinate playAITurn() {
 
     Player current = getCurrentPlayer();
-    Player target = getTargetPlayer();
 
     if (!(current instanceof AI)) {
         throw new IllegalStateException("Le joueur courant n'est pas une IA");
     }
 
     AI ai = (AI) current;
+    int selfNumber = game.getPlayers().indexOf(current) + 1;
+    ShootDecision decision = ai.chooseShootingTarget(game, selfNumber);
+    Player target = game.getPlayers().get(decision.defenderNumber() - 1);
+    ShotResult result = game.shoot(current, target, decision.coordinate());
+    ai.handleShotResult(decision.defenderNumber(), decision.coordinate(), result);
 
-    Coordinate shot = ai.chooseTarget();
-
-    ShotResult result = game.shoot(current, target, shot);
-
-    ai.handleShotResult(shot, result);
-
-    return shot;
+    return decision.coordinate();
 }
 
 public static Game createNewGameVsAI(int gridSize, List<Integer> fleetShipSizes) {
