@@ -452,7 +452,7 @@ function App() {
   }, [handleCellHover, expectedOwnBoardId])
 
   useEffect(() => {
-    if (screen !== 'game' || !isDuelWithAi || !gameState || loading || !currentIsAi || gamePhase !== 'BATTLE') return
+    if (screen !== 'game' || !gameState || loading || !currentIsAi || gamePhase !== 'BATTLE') return
     if (aiStepLockRef.current) return
     aiStepLockRef.current = true
     setStatusMessage("Tour de l'IA...")
@@ -469,7 +469,7 @@ function App() {
       window.clearTimeout(timerId)
       aiStepLockRef.current = false
     }
-  }, [screen, isDuelWithAi, gameState, loading, currentIsAi, gamePhase, runAiStepAction])
+  }, [screen, gameState, loading, currentIsAi, gamePhase, runAiStepAction])
 
   useEffect(() => {
     const previous = previousGameStateRef.current

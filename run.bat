@@ -1,28 +1,13 @@
 @echo off
-REM Compiler tous les fichiers .java sous src\ vers le dossier courant (.)
+setlocal
 
-echo Compilation du projet Java...
+echo Lancement du mode console via Maven...
 
-setlocal enabledelayedexpansion
-set JAVA_FILES=
-
-for /R src %%f in (*.java) do (
-    set JAVA_FILES=!JAVA_FILES! "%%f"
-)
-
-if "%JAVA_FILES%"=="" (
-    echo Aucun fichier .java trouvé dans le dossier src
+pushd app\backend
+call mvn -DskipTests compile exec:java -Dexec.mainClass=com.ehv.battleship.view.ConsoleMain -Dexec.classpathScope=runtime
+set RUN_EXIT_CODE=%errorlevel%
+popd
+if not "%RUN_EXIT_CODE%"=="0" (
+    echo Le lancement du mode console a echoue.
     exit /b 1
 )
-
-javac -d . %JAVA_FILES%
-if errorlevel 1 (
-    echo La compilation a echoue.
-    exit /b 1
-)
-
-echo Compilation reussie.
-echo Lancement du jeu...
-
-REM Classe principale
-java com.ehv.battleship.view.ConsoleMain
