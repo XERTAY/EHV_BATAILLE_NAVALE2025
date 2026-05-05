@@ -75,6 +75,9 @@ export function fireAt(payload) {
   if (payload.targetPlayer != null) {
     body.targetPlayer = payload.targetPlayer
   }
+  if (payload.gameId != null && String(payload.gameId).trim() !== '') {
+    body.gameId = String(payload.gameId).trim()
+  }
   return callApi('/game/fire', {
     method: 'POST',
     body: JSON.stringify(body),
