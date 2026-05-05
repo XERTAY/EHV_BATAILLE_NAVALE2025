@@ -410,11 +410,24 @@ public final class DuelGameService {
             }
         }
         if (!allDone) {
+            // Passe le tour au prochain joueur qui doit encore placer sa flotte.
+            currentPlayer = nextPlayerAwaitingPlacement(player);
             return;
         }
         game.setState(GameState.PLAYING);
         phase = DuelPhase.BATTLE;
         currentPlayer = placementCompletionOrder.isEmpty() ? 1 : placementCompletionOrder.get(0);
+    }
+
+    private int nextPlayerAwaitingPlacement(int from) {
+        int next = from;
+        for (int i = 0; i < playerCount; i++) {
+            next = (next % playerCount) + 1;
+            if (!isFleetComplete(next)) {
+                return next;
+            }
+        }
+        return from;
     }
 
     /**

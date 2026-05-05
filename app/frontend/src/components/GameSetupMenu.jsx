@@ -56,31 +56,51 @@ function GameSetupMenu({
   const aiCountValue = setup.withAI ? Math.max(1, setup.playerCount - effectiveHumanPlayers) : 0
 
   const launchNewGame = () => {
-    onChange({ startMode: 'new' })
-    onStart()
+    onStart({ startMode: 'new', setupPatch: setup })
   }
   const launchLobbyGame = () => {
-    onChange({ startMode: 'new' })
-    onStartLobbyGame()
+    onStartLobbyGame(setup)
   }
 
   const launchLoadGame = () => {
-    onChange({ startMode: 'load' })
-    onStart()
+    onStart({ startMode: 'load', setupPatch: setup })
   }
+  const humanSlotsRemaining = Math.max(0, setup.playerCount - 1 - effectiveAiPlayers)
+  const shouldShareId = humanSlotsRemaining > 0
   const canLaunchFromLobby = Boolean(lobby?.inLobby && lobby?.players >= 2)
-  const canCopyGameId = Boolean(lobby?.gameId)
-  const isGuestInLobby = Boolean(lobby?.inLobby && !lobby?.isHost)
-  const isHostInLobby = Boolean(lobby?.inLobby && lobby?.isHost)
+  const canCopyGameId = Boolean(shouldShareId && lobby?.gameId)
+  const isGuestInLobby = Boolean(shouldShareId && lobby?.inLobby && !lobby?.isHost)
+  const isHostInLobby = Boolean(shouldShareId && lobby?.inLobby && lobby?.isHost)
+  const canLaunchNewGame = shouldShareId ? Boolean(isHostInLobby && canLaunchFromLobby && canStart) : canStart
 
   const handleCopyGameId = async () => {
     if (!lobby?.gameId) return
     try {
-      await navigator.clipboard.writeText(lobby.gameId)
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(lobby.gameId)
+      } else {
+        throw new Error('clipboard-api-unavailable')
+      }
       setCopyLabel('ID copie')
       window.setTimeout(() => setCopyLabel('Copier l ID'), 1200)
     } catch {
-      setCopyLabel('Copie impossible')
+      try {
+        const helperInput = document.createElement('textarea')
+        helperInput.value = lobby.gameId
+        helperInput.setAttribute('readonly', '')
+        helperInput.style.position = 'fixed'
+        helperInput.style.opacity = '0'
+        helperInput.style.pointerEvents = 'none'
+        document.body.appendChild(helperInput)
+        helperInput.focus()
+        helperInput.select()
+        const copied = document.execCommand('copy')
+        document.body.removeChild(helperInput)
+        if (!copied) throw new Error('copy-failed')
+        setCopyLabel('ID copie')
+      } catch {
+        setCopyLabel('Copie impossible')
+      }
       window.setTimeout(() => setCopyLabel('Copier l ID'), 1200)
     }
   }
@@ -91,7 +111,7 @@ function GameSetupMenu({
   }
 
   useEffect(() => {
-    if (menuStep !== 'new' || !wsConnected) return
+    if (menuStep !== 'new' || !wsConnected || !shouldShareId) return
     if (!lobby?.inLobby) {
       onCreateLobby(setup.playerCount)
       return
@@ -101,7 +121,7 @@ function GameSetupMenu({
     if (lobby.isHost && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
       onCreateLobby(setup.playerCount)
     }
-  }, [menuStep, wsConnected, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
+  }, [menuStep, wsConnected, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
 
   return (
     <main className="menu-screen">
@@ -128,7 +148,7 @@ function GameSetupMenu({
                 Retour
               </button>
             )}
-            {menuStep === 'new' && (
+            {menuStep === 'new' && shouldShareId && (
               <div className="menu-topbar__lobby">
                 <span>ID: {lobby?.gameId ?? '---'}</span>
                 <button
@@ -333,9 +353,18 @@ function GameSetupMenu({
                     Modifier la flotte
                   </button>
                 </div>
-                <div className="menu-summary">
-                  <span>Joueurs: {lobby?.players ?? 0}/{lobby?.maxPlayers ?? setup.playerCount}</span>
-                </div>
+                {shouldShareId
+                  ? (
+                    <div className="menu-summary">
+                      <span>Joueurs: {lobby?.players ?? 0}/{lobby?.maxPlayers ?? setup.playerCount}</span>
+                      <span>ID a partager ({humanSlotsRemaining} place(s) humaine(s) restante(s))</span>
+                    </div>
+                    )
+                  : (
+                    <div className="menu-summary">
+                      <span>Lobby complet avec IA (aucune place humaine restante)</span>
+                    </div>
+                    )}
               </article>
             </div>
           </div>
@@ -346,8 +375,8 @@ function GameSetupMenu({
             <button
               type="button"
               className="menu-button menu-button--primary"
-              onClick={isHostInLobby ? launchLobbyGame : launchNewGame}
-              disabled={isHostInLobby ? (!canStart || !canLaunchFromLobby) : !canStart}
+              onClick={shouldShareId ? launchLobbyGame : launchNewGame}
+              disabled={!canLaunchNewGame}
             >
               Lancer la partie
             </button>

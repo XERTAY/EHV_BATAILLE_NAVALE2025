@@ -115,6 +115,32 @@
   text-transform: uppercase;
 }
 
+.turn-banner--result {
+  top: 50%;
+  bottom: auto;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 34px;
+  padding: 18px 30px;
+  letter-spacing: 1.2px;
+}
+
+.turn-banner--victory {
+  border-color: rgba(70, 233, 140, 0.95);
+  color: #4dff9f;
+  text-shadow:
+    0 0 10px rgba(77, 255, 159, 0.8),
+    0 0 24px rgba(77, 255, 159, 0.5);
+}
+
+.turn-banner--defeat {
+  border-color: rgba(255, 90, 90, 0.95);
+  color: #ff5d5d;
+  text-shadow:
+    0 0 10px rgba(255, 93, 93, 0.8),
+    0 0 24px rgba(255, 93, 93, 0.5);
+}
+
 .game-banner {
   position: absolute;
   top: 14px;
