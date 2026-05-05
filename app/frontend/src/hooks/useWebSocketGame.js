@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import wsClient from '../api/wsClient'
 
 function useWebSocketGame() {
@@ -20,11 +20,9 @@ function useWebSocketGame() {
     }
   }, [])
 
-  const ensureConnected = () => {
-    const readyState = wsClient.ws?.readyState
-    if (readyState === WebSocket.OPEN || readyState === WebSocket.CONNECTING) return
-    wsClient.connect()
-  }
+  const ensureConnected = useCallback(() => {
+    wsClient.ensureOpen()
+  }, [])
 
   const createGame = (maxPlayers = 4) => {
     ensureConnected()
@@ -40,7 +38,7 @@ function useWebSocketGame() {
   }
   const send = (obj) => wsClient.send(obj)
 
-  return { wsState, wsMessage, createGame, joinGame, startGame, send }
+  return { wsState, wsMessage, ensureConnected, createGame, joinGame, startGame, send }
 }
 
 export default useWebSocketGame

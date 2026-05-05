@@ -12,6 +12,7 @@ function GameSetupMenu({
   onRefreshSaves,
   loading,
   wsConnected,
+  ensureWs,
   lobby,
   statusMessage,
 }) {
@@ -112,7 +113,16 @@ function GameSetupMenu({
   }
 
   useEffect(() => {
-    if (menuStep !== 'new' || !wsConnected || !shouldShareId) return
+    const needsWs =
+      menuStep === 'online' || (menuStep === 'new' && shouldShareId)
+    if (needsWs) {
+      ensureWs?.()
+    }
+  }, [menuStep, shouldShareId, ensureWs])
+
+  useEffect(() => {
+    // Ne pas attendre wsConnected: createGame/join appellent ensureOpen avant send.
+    if (menuStep !== 'new' || !shouldShareId) return
     if (!lobby?.inLobby) {
       onCreateLobby(setup.playerCount)
       return
@@ -122,7 +132,7 @@ function GameSetupMenu({
     if (lobby.isHost && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
       onCreateLobby(setup.playerCount)
     }
-  }, [menuStep, wsConnected, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
+  }, [menuStep, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
 
   return (
     <main className="menu-screen">
@@ -213,7 +223,7 @@ function GameSetupMenu({
                   type="button"
                   className="menu-button menu-button--secondary"
                   onClick={() => onJoinLobby(joinGameId)}
-                  disabled={!wsConnected || !joinGameId.trim() || loading}
+                  disabled={!joinGameId.trim() || loading}
                 >
                   Rejoindre
                 </button>
