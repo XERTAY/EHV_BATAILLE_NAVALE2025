@@ -9,6 +9,8 @@ public record GameStateResponse(
     Integer winner,
     List<BoardStateView> boards,
     List<Boolean> playersAlive,
-    List<Boolean> aiPlayers
+    List<Boolean> aiPlayers,
+    List<Boolean> placementLockedByPlayer,
+    List<List<String>> placedShipTypesByPlayer
 ) {
 }

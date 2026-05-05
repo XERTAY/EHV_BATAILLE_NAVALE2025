@@ -39,6 +39,10 @@ public class Fleet implements Serializable {
         ships.add(ship);
     }
 
+    public boolean removeShip(Ship ship) {
+        return ships.remove(ship);
+    }
+
     public List<Integer> getRequiredSizes() {
         return Collections.unmodifiableList(requiredSizes);
     }

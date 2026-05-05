@@ -14,6 +14,111 @@ const CELL_COLORS = {
   HIT: '#f58b33',
   SUNK: '#c23232',
 }
+const IMPACT_ANIMATION_MS = 3000
+const PARTICLE_COUNT = 26
+
+function createImpactParticles() {
+  return Array.from({ length: PARTICLE_COUNT }, (_, index) => {
+    const angle = (index / PARTICLE_COUNT) * Math.PI * 2
+    const ring = 0.35 + ((index % 5) * 0.12)
+    const speed = 0.35 + ((index % 7) * 0.09)
+    const wobble = 0.2 + ((index % 3) * 0.08)
+    const size = 0.18 + ((index % 4) * 0.08)
+    return { angle, ring, speed, wobble, size }
+  })
+}
+
+function ImpactParticles({ cell, cellSize }) {
+  const groupRef = useRef(null)
+  const particleRefs = useRef([])
+  const particles = useMemo(() => createImpactParticles(), [])
+  const color = cell.type === 'SUNK' ? '#ff2d2d' : cell.type === 'HIT' ? '#ff9b2f' : '#d6e6f5'
+
+  useFrame(() => {
+    const group = groupRef.current
+    if (!group) return
+
+    const nowMs = Date.now()
+    const startedAt = Number(cell.startedAt) || 0
+    const elapsedMs = Math.max(0, nowMs - startedAt)
+    const progress = Math.min(1, elapsedMs / IMPACT_ANIMATION_MS)
+    const life = 1 - progress
+    const t = elapsedMs * 0.001
+
+    const burstScale = 0.55 + Math.sin(elapsedMs * 0.01) * 0.1
+    group.scale.setScalar(0.8 + burstScale * life * 0.9)
+
+    for (let i = 0; i < particles.length; i += 1) {
+      const part = particles[i]
+      const mesh = particleRefs.current[i]
+      if (!mesh?.material) continue
+
+      const radial = (part.ring + progress * (1.2 + part.speed)) * cellSize * 0.26
+      const wave = Math.sin(t * (3 + part.speed) + i) * part.wobble * cellSize * 0.05
+      const x = Math.cos(part.angle + t * 0.7) * radial + wave
+      const y = Math.sin(part.angle + t * 0.7) * radial - wave
+      const z = 0.12 + Math.sin(t * 5 + i) * 0.05 + progress * 0.18
+      mesh.position.set(x, y, z)
+
+      const s = (part.size * cellSize * 0.1) * (0.7 + life * 1.1)
+      mesh.scale.set(s, s, s)
+      mesh.material.opacity = Math.max(0.12, 0.25 + life * 0.75)
+    }
+  })
+
+  return (
+    <group ref={groupRef} position={[cell.x, cell.y, 0.08]}>
+      {particles.map((part, idx) => (
+        <mesh
+          key={`p-${cell.key}-${idx}`}
+          ref={(node) => { particleRefs.current[idx] = node }}
+          renderOrder={8}
+        >
+          <sphereGeometry args={[0.08, 8, 8]} />
+          <meshBasicMaterial color={color} transparent opacity={0.85} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function AnimatedImpactCell({ cell, cellSize }) {
+  const meshRef = useRef(null)
+  const materialRef = useRef(null)
+
+  useFrame(() => {
+    const mesh = meshRef.current
+    const material = materialRef.current
+    if (!mesh || !material) return
+
+    const nowMs = Date.now()
+    const startedAt = Number(cell.startedAt) || 0
+    const elapsedMs = Math.max(0, nowMs - startedAt)
+    const progress = Math.min(1, elapsedMs / IMPACT_ANIMATION_MS)
+    const life = 1 - progress
+
+    const pulse = Math.sin(elapsedMs * 0.006)
+    const blink = Math.sin(elapsedMs * 0.022)
+    const dynamicScale = 1 + pulse * 0.12 * (0.4 + life * 0.6)
+    mesh.scale.set(dynamicScale, dynamicScale, 1)
+
+    const baseOpacity = 0.46 + life * 0.32
+    const blinkOpacity = blink * 0.06 * life
+    material.opacity = Math.max(0.18, Math.min(0.92, baseOpacity + blinkOpacity))
+  })
+
+  return (
+    <mesh ref={meshRef} position={[cell.x, cell.y, 0.07]}>
+      <planeGeometry args={[cellSize * 0.95, cellSize * 0.95]} />
+      <meshBasicMaterial
+        ref={materialRef}
+        color={cell.type === 'SUNK' ? '#ff2d2d' : cell.type === 'HIT' ? '#ff9b2f' : '#cad8e6'}
+        transparent
+        opacity={0.9}
+      />
+    </mesh>
+  )
+}
 
 function WaterBoard({
   boardId,
@@ -102,6 +207,7 @@ function WaterBoard({
         key: `preview-${cell.x}-${cell.y}`,
         x: -half + (rawX + 0.5) * cellSize,
         y: -half + (rawY + 0.5) * cellSize,
+        inBounds: cell.inBounds !== false,
       }
     })
   }, [previewCells, flipColumns, flipRows, cells, half, cellSize])
@@ -130,6 +236,7 @@ function WaterBoard({
         x: -half + (rawX + 0.5) * cellSize,
         y: -half + (rawY + 0.5) * cellSize,
         type: impact.type,
+        startedAt: impact.startedAt,
       }
     })
   }, [recentImpacts, flipColumns, flipRows, cells, half, cellSize])
@@ -276,6 +383,7 @@ function WaterBoard({
           <FleetShipMeshes
             cellStates={revealedShipModelCells}
             previewCells={previewCells}
+            recentImpacts={recentImpacts}
             cells={cells}
             half={half}
             cellSize={cellSize}
@@ -288,19 +396,15 @@ function WaterBoard({
         {projectedPreviewCells.map((cell) => (
           <mesh key={cell.key} position={[cell.x, cell.y, 0.06]}>
             <planeGeometry args={[cellSize * 0.88, cellSize * 0.88]} />
-            <meshBasicMaterial color="#5fd4ff" transparent opacity={0.45} />
+            <meshBasicMaterial color={cell.inBounds ? '#5fd4ff' : '#ff4b4b'} transparent opacity={0.45} />
           </mesh>
         ))}
 
         {projectedImpactCells.map((cell) => (
-          <mesh key={cell.key} position={[cell.x, cell.y, 0.07]}>
-            <planeGeometry args={[cellSize * 0.95, cellSize * 0.95]} />
-            <meshBasicMaterial
-              color={cell.type === 'SUNK' ? '#ff2d2d' : cell.type === 'HIT' ? '#ff9b2f' : '#8ccfff'}
-              transparent
-              opacity={0.9}
-            />
-          </mesh>
+          <group key={cell.key}>
+            <AnimatedImpactCell cell={cell} cellSize={cellSize} />
+            <ImpactParticles cell={cell} cellSize={cellSize} />
+          </group>
         ))}
 
         {interactive && hoveredCell && (

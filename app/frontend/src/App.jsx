@@ -37,8 +37,15 @@ const DEFAULT_SETUP = {
   humanPlayers: 2,
   withAI: false,
 }
-const AI_STEP_DELAY_MS = 500
-const IMPACT_FLASH_MS = 700
+const AI_STEP_DELAY_MS = 300
+const SHOOT_MODE_UNLOCK_DELAY_MS = 1000
+const SHOOT_MODE_AUTO_ENTER_MS = 7000
+const IMPACT_FLASH_MS = 3000
+const ENEMY_IMPACT_REVEAL_DELAY_MS = 1000
+
+function cloneCellsGrid(cells) {
+  return cells.map((row) => [...row])
+}
 
 function normalizeSetup(setup) {
   const playerCount = setup.playerCount === 4 ? 4 : 2
@@ -88,6 +95,9 @@ function App() {
   const [waveMode, setWaveMode] = useState('gpu')
   const [benchmarkEnabled, setBenchmarkEnabled] = useState(false)
   const [statusMessage, setStatusMessage] = useState('Initialisation de la partie...')
+  const [shootModeActive, setShootModeActive] = useState(false)
+  const [shootModeButtonUnlocked, setShootModeButtonUnlocked] = useState(false)
+  const [shootModeProgress, setShootModeProgress] = useState(0)
   const [setup, setSetup] = useState(DEFAULT_SETUP)
   const [availableSaves, setAvailableSaves] = useState([])
   const {
@@ -103,11 +113,19 @@ function App() {
     refreshStateAction,
     syncStateAction,
     runAiStepAction,
+    removeShipAction,
+    confirmPlacementAction,
   } = useGameApi()
   const aiStepLockRef = useRef(false)
+  const delayedOwnBoardTimerRef = useRef(null)
+  const displayedOwnBoardCellsRef = useRef(null)
+  const pendingImpactRevealsRef = useRef([])
+  const impactRevealInProgressRef = useRef(false)
+  const previousDisplayedOwnBoardCellsRef = useRef(null)
   const previousGameStateRef = useRef(null)
   const impactClearTimerRef = useRef(null)
   const [recentImpactsByBoard, setRecentImpactsByBoard] = useState({})
+  const [delayedOwnBoardCells, setDelayedOwnBoardCells] = useState(null)
   const [lobbyState, setLobbyState] = useState({
     inLobby: false,
     isHost: false,
@@ -141,12 +159,55 @@ function App() {
     saveLastSetupToStorage(setup)
   }, [setup])
 
+  useEffect(() => {
+    return () => {
+      if (delayedOwnBoardTimerRef.current) {
+        window.clearTimeout(delayedOwnBoardTimerRef.current)
+        delayedOwnBoardTimerRef.current = null
+      }
+      if (impactClearTimerRef.current) {
+        window.clearTimeout(impactClearTimerRef.current)
+        impactClearTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const scheduleNextImpactReveal = useCallback(() => {
+    if (impactRevealInProgressRef.current) return
+    if (pendingImpactRevealsRef.current.length === 0) return
+    impactRevealInProgressRef.current = true
+    delayedOwnBoardTimerRef.current = window.setTimeout(() => {
+      const nextImpact = pendingImpactRevealsRef.current.shift()
+      const displayedCells = displayedOwnBoardCellsRef.current
+      if (nextImpact && Array.isArray(displayedCells?.[nextImpact.y])) {
+        const nextDisplayed = cloneCellsGrid(displayedCells)
+        nextDisplayed[nextImpact.y][nextImpact.x] = nextImpact.value
+        displayedOwnBoardCellsRef.current = nextDisplayed
+        setDelayedOwnBoardCells(nextDisplayed)
+      }
+      delayedOwnBoardTimerRef.current = null
+      impactRevealInProgressRef.current = false
+      scheduleNextImpactReveal()
+    }, ENEMY_IMPACT_REVEAL_DELAY_MS)
+  }, [])
+
   const boards = useMemo(() => {
     return BOARD_CONFIGS[layoutSet]
   }, [layoutSet])
 
   const currentPlayer = gameState?.currentPlayer ?? 1
-  const localPlayerNumber = lobbyState?.inLobby ? (lobbyState.playerNumber ?? 1) : currentPlayer
+  const localPlayerNumber = useMemo(() => {
+    if (lobbyState?.inLobby) {
+      return lobbyState.playerNumber ?? 1
+    }
+    const aiSlots = Array.isArray(gameState?.aiPlayers) ? gameState.aiPlayers : null
+    if (aiSlots && aiSlots.some(Boolean)) {
+      const firstHumanIndex = aiSlots.findIndex((isAi) => !isAi)
+      if (firstHumanIndex >= 0) return firstHumanIndex + 1
+      return 1
+    }
+    return currentPlayer
+  }, [lobbyState?.inLobby, lobbyState?.playerNumber, gameState?.aiPlayers, currentPlayer])
   const isLocalTurn = currentPlayer === localPlayerNumber
   const currentIsAi = useMemo(
     () => Array.isArray(gameState?.aiPlayers) && Boolean(gameState.aiPlayers[currentPlayer - 1]),
@@ -160,10 +221,17 @@ function App() {
     const stateById = {}
     if (!gameState?.boards) return stateById
     for (const board of gameState.boards) {
-      stateById[board.boardId] = board
+      if (board.ownBoard && delayedOwnBoardCells) {
+        stateById[board.boardId] = {
+          ...board,
+          cells: delayedOwnBoardCells,
+        }
+      } else {
+        stateById[board.boardId] = board
+      }
     }
     return stateById
-  }, [gameState])
+  }, [gameState, delayedOwnBoardCells])
 
   const expectedOwnBoardId = useMemo(() => {
     if (boards.length === 0) return 'A1'
@@ -195,14 +263,18 @@ function App() {
     selectedShipType,
     selectedShipLabel,
     selectedShipSize,
+    placedShips,
     setSelectedShipType,
     placementOrientation,
     setPlacementOrientation,
     rotatePlacementOrientationClockwise,
+    removalModeEnabled,
+    setRemovalModeEnabled,
     remainingShips,
     placementPreview,
     handlePlacementSuccess,
     handleCellHover,
+    syncPlacedShipsForPlayer,
     resetPlacement,
   } = usePlacement({
     currentPlayer: localPlayerNumber,
@@ -232,6 +304,13 @@ function App() {
     }
     return currentIsAi ? "Tour de l'IA" : 'Votre tour'
   }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, isGameOver, didLocalPlayerWin, currentPlayer, isLocalTurn])
+  const placementLockedByPlayer = gameState?.placementLockedByPlayer ?? []
+  const placedShipTypesByPlayer = gameState?.placedShipTypesByPlayer ?? []
+  const localPlacementLocked = Boolean(placementLockedByPlayer[localPlayerNumber - 1])
+  const shouldOfferShootMode = gamePhase === 'BATTLE' && isLocalTurn && !currentIsAi && !isGameOver
+  const selectableShips = removalModeEnabled ? placedShips : remainingShips
+  const canRemoveSelectedShip = placedShips.some((ship) => ship.type === selectedShipType)
+  const showShipSelectionRow = remainingShips.length > 0 || removalModeEnabled
 
   const interactiveBoards = useMemo(() => {
     if (!gameState) return {}
@@ -242,9 +321,11 @@ function App() {
       return {}
     }
     if (gamePhase === 'PLACEMENT') {
+      if (localPlacementLocked) return {}
       return { [expectedOwnBoardId]: true }
     }
     if (gamePhase !== 'BATTLE') return {}
+    if (shouldOfferShootMode && !shootModeActive) return {}
     const alive = gameState.playersAlive
     const n = Math.min(numPlayersInState, boards.length)
     const next = {}
@@ -257,7 +338,7 @@ function App() {
       if (boardId) next[boardId] = true
     }
     return next
-  }, [numPlayersInState, boards, gameState, gamePhase, expectedOwnBoardId, currentIsAi, lobbyState.inLobby, isLocalTurn, localPlayerNumber])
+  }, [numPlayersInState, boards, gameState, gamePhase, expectedOwnBoardId, currentIsAi, lobbyState.inLobby, isLocalTurn, localPlayerNumber, localPlacementLocked, shouldOfferShootMode, shootModeActive])
 
   const applySetupPatch = useCallback((patch) => {
     setSetup((current) => normalizeSetup({ ...current, ...patch }))
@@ -354,6 +435,19 @@ function App() {
     try {
       let result = null
       if (gamePhase === 'PLACEMENT') {
+        if (localPlacementLocked) {
+          setStatusMessage('Placement deja valide. Impossible de modifier votre flotte.')
+          return
+        }
+        if (removalModeEnabled) {
+          result = await removeShipAction({
+            player: localPlayerNumber,
+            x,
+            y,
+          })
+          setStatusMessage(`Navire retire depuis ${boardId} ${label}.`)
+          return
+        }
         if (remainingShips.length === 0) {
           setStatusMessage(`Joueur ${currentPlayer}: tous vos navires sont deja poses.`)
           return
@@ -423,7 +517,10 @@ function App() {
     expectedOwnBoardId,
     numPlayersInState,
     remainingShips.length,
+    localPlacementLocked,
+    removalModeEnabled,
     placeShipAction,
+    removeShipAction,
     selectedShipType,
     selectedShipLabel,
     placementOrientation,
@@ -431,6 +528,58 @@ function App() {
     handlePlacementSuccess,
     fireAtAction,
     currentIsAi,
+  ])
+
+  const handleConfirmPlacement = useCallback(async () => {
+    if (loading || !gameState || gamePhase !== 'PLACEMENT') return
+    if (localPlacementLocked) return
+    if (remainingShips.length > 0) {
+      setStatusMessage('Placez tous les navires avant de valider.')
+      return
+    }
+    try {
+      await confirmPlacementAction({ player: localPlayerNumber })
+      setStatusMessage('Placement valide. En attente des autres joueurs...')
+      setRemovalModeEnabled(false)
+    } catch {
+      // L'erreur est geree dans le hook API.
+    }
+  }, [
+    loading,
+    gameState,
+    gamePhase,
+    localPlacementLocked,
+    remainingShips.length,
+    confirmPlacementAction,
+    localPlayerNumber,
+    setRemovalModeEnabled,
+  ])
+
+  const handleRemoveSelectedShip = useCallback(async () => {
+    if (loading || !gameState || gamePhase !== 'PLACEMENT' || localPlacementLocked) return
+    if (!canRemoveSelectedShip) {
+      setStatusMessage('Ce navire n est pas encore place.')
+      return
+    }
+    try {
+      await removeShipAction({
+        player: localPlayerNumber,
+        shipType: selectedShipType,
+      })
+      setStatusMessage(`Navire ${selectedShipLabel} retire.`)
+    } catch {
+      // L'erreur est geree dans le hook API.
+    }
+  }, [
+    loading,
+    gameState,
+    gamePhase,
+    localPlacementLocked,
+    canRemoveSelectedShip,
+    removeShipAction,
+    localPlayerNumber,
+    selectedShipType,
+    selectedShipLabel,
   ])
 
   useEffect(() => {
@@ -450,6 +599,12 @@ function App() {
   const onCellHover = useCallback((cellData) => {
     handleCellHover(cellData, expectedOwnBoardId)
   }, [handleCellHover, expectedOwnBoardId])
+
+  useEffect(() => {
+    if (!Array.isArray(gameState?.placedShipTypesByPlayer)) return
+    const shipTypes = gameState.placedShipTypesByPlayer[localPlayerNumber - 1]
+    syncPlacedShipsForPlayer(localPlayerNumber, shipTypes)
+  }, [gameState?.placedShipTypesByPlayer, localPlayerNumber, syncPlacedShipsForPlayer])
 
   useEffect(() => {
     if (screen !== 'game' || !isDuelWithAi || !gameState || loading || !currentIsAi || gamePhase !== 'BATTLE') return
@@ -472,29 +627,82 @@ function App() {
   }, [screen, isDuelWithAi, gameState, loading, currentIsAi, gamePhase, runAiStepAction])
 
   useEffect(() => {
-    const previous = previousGameStateRef.current
-    previousGameStateRef.current = gameState
-    if (!gameState || !previous || gameState.phase !== 'BATTLE') return
-    const ownBoard = gameState.boards?.find((board) => board.ownBoard)
-    const previousOwnBoard = previous.boards?.find((board) => board.ownBoard)
-    if (!ownBoard?.cells || !previousOwnBoard?.cells) return
+    if (!gameState || gameState.phase !== 'BATTLE') {
+      if (delayedOwnBoardTimerRef.current) {
+        window.clearTimeout(delayedOwnBoardTimerRef.current)
+        delayedOwnBoardTimerRef.current = null
+      }
+      pendingImpactRevealsRef.current = []
+      impactRevealInProgressRef.current = false
+      displayedOwnBoardCellsRef.current = null
+      previousDisplayedOwnBoardCellsRef.current = null
+      setDelayedOwnBoardCells(null)
+      return
+    }
 
+    const ownBoard = gameState.boards?.find((board) => board.ownBoard)
+    const nextCells = ownBoard?.cells
+    if (!ownBoard || !Array.isArray(nextCells)) return
+
+    const displayedCells = displayedOwnBoardCellsRef.current
+    if (!displayedCells) {
+      displayedOwnBoardCellsRef.current = nextCells
+      previousDisplayedOwnBoardCellsRef.current = nextCells
+      setDelayedOwnBoardCells(nextCells)
+      return
+    }
+
+    const nextDisplayed = cloneCellsGrid(displayedCells)
+    let hasImmediateChange = false
+    for (let y = 0; y < nextCells.length; y += 1) {
+      const nextRow = nextCells[y] ?? []
+      const shownRow = nextDisplayed[y] ?? []
+      for (let x = 0; x < nextRow.length; x += 1) {
+        const nextCell = nextRow[x]
+        const shownCell = shownRow[x]
+        if (nextCell === shownCell) continue
+        if (nextCell === 'MISS' || nextCell === 'HIT' || nextCell === 'SUNK') {
+          pendingImpactRevealsRef.current.push({ x, y, value: nextCell })
+          continue
+        }
+        shownRow[x] = nextCell
+        hasImmediateChange = true
+      }
+    }
+
+    if (hasImmediateChange) {
+      displayedOwnBoardCellsRef.current = nextDisplayed
+      setDelayedOwnBoardCells(nextDisplayed)
+    }
+    scheduleNextImpactReveal()
+  }, [gameState, scheduleNextImpactReveal])
+
+  useEffect(() => {
+    if (!gameState || gameState.phase !== 'BATTLE' || !Array.isArray(delayedOwnBoardCells)) {
+      previousDisplayedOwnBoardCellsRef.current = null
+      return
+    }
+    const previousOwnBoardCells = previousDisplayedOwnBoardCellsRef.current
+    previousDisplayedOwnBoardCellsRef.current = delayedOwnBoardCells
+    if (!Array.isArray(previousOwnBoardCells)) return
+
+    const impactStartedAt = Date.now()
     const impacts = []
-    for (let y = 0; y < ownBoard.cells.length; y += 1) {
-      const row = ownBoard.cells[y] ?? []
-      const previousRow = previousOwnBoard.cells[y] ?? []
+    for (let y = 0; y < delayedOwnBoardCells.length; y += 1) {
+      const row = delayedOwnBoardCells[y] ?? []
+      const previousRow = previousOwnBoardCells[y] ?? []
       for (let x = 0; x < row.length; x += 1) {
         const nextCell = row[x]
         const prevCell = previousRow[x]
         if (nextCell === prevCell) continue
         if (nextCell === 'MISS' || nextCell === 'HIT' || nextCell === 'SUNK') {
-          impacts.push({ x, y, type: nextCell })
+          impacts.push({ x, y, type: nextCell, startedAt: impactStartedAt })
         }
       }
     }
     if (impacts.length === 0) return
 
-    setRecentImpactsByBoard({ [ownBoard.boardId]: impacts })
+    setRecentImpactsByBoard({ [clientOwnBoardId]: impacts })
     const last = impacts[impacts.length - 1]
     if (last.type === 'SUNK') {
       setStatusMessage('Votre flotte a subi un coup critique (navire coule).')
@@ -510,7 +718,7 @@ function App() {
       setRecentImpactsByBoard({})
       impactClearTimerRef.current = null
     }, IMPACT_FLASH_MS)
-  }, [gameState])
+  }, [gameState, delayedOwnBoardCells, clientOwnBoardId])
 
   // --- WebSocket integration ---
   const { wsState, wsMessage, createGame, joinGame, startGame } = useWebSocketGame()
@@ -582,7 +790,9 @@ function App() {
   const gameSummary = useMemo(() => {
     return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
   }, [setup])
-  const isPlayerInShootMode = gamePhase === 'BATTLE' && isLocalTurn && !currentIsAi
+  const isPlayerInShootMode = gamePhase === 'BATTLE' && isLocalTurn && !currentIsAi && shootModeActive
+  const shouldShowShootModePrompt = shouldOfferShootMode && !shootModeActive
+  const shouldShowPlacementConfirmPrompt = gamePhase === 'PLACEMENT' && !localPlacementLocked && remainingShips.length === 0
   const cameraAnchorPlayer = useMemo(() => {
     if (isPlayerInShootMode && numPlayersInState === 2) {
       return localPlayerNumber === 1 ? 2 : 1
@@ -599,17 +809,68 @@ function App() {
     const gamePart = lobbyState.gameId ?? 'local'
     return `${gamePart}:player:${localPlayerNumber}`
   }, [lobbyState.gameId, localPlayerNumber])
+  const [manualCameraDirection, setManualCameraDirection] = useState(null)
+  const effectiveCameraDirection = manualCameraDirection ?? cameraDirection
   const [cameraFacingDirection, setCameraFacingDirection] = useState(cameraDirection)
   useEffect(() => {
+    setManualCameraDirection(null)
     setCameraFacingDirection(cameraDirection)
   }, [cameraDirection, cameraStateKey])
+  const canChooseCameraDirection = !isPlayerInShootMode
+  const handleCompassDirectionClick = useCallback((direction) => {
+    if (!canChooseCameraDirection) return
+    setManualCameraDirection(direction)
+  }, [canChooseCameraDirection])
   const cameraDirectionLabel = useMemo(() => {
     if (cameraFacingDirection === 'NORTH') return 'NORD'
     if (cameraFacingDirection === 'SOUTH') return 'SUD'
     if (cameraFacingDirection === 'EAST') return 'EST'
     return 'OUEST'
   }, [cameraFacingDirection])
-  const localPlacementCompleted = gamePhase === 'PLACEMENT' && remainingShips.length === 0
+  const localPlacementCompleted = gamePhase === 'PLACEMENT' && localPlacementLocked
+
+  useEffect(() => {
+    if (!shouldOfferShootMode) {
+      setShootModeActive(false)
+      setShootModeButtonUnlocked(false)
+      setShootModeProgress(0)
+      return
+    }
+
+    setShootModeActive(false)
+    setShootModeButtonUnlocked(false)
+    setShootModeProgress(0)
+
+    const startedAt = Date.now()
+    const unlockTimer = window.setTimeout(() => {
+      setShootModeButtonUnlocked(true)
+    }, SHOOT_MODE_UNLOCK_DELAY_MS)
+    const autoEnterTimer = window.setTimeout(() => {
+      setShootModeActive(true)
+    }, SHOOT_MODE_AUTO_ENTER_MS)
+    const progressInterval = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt
+      const nextProgress = Math.min(1, elapsed / SHOOT_MODE_AUTO_ENTER_MS)
+      setShootModeProgress(nextProgress)
+    }, 50)
+
+    return () => {
+      window.clearTimeout(unlockTimer)
+      window.clearTimeout(autoEnterTimer)
+      window.clearInterval(progressInterval)
+    }
+  }, [shouldOfferShootMode, currentPlayer, localPlayerNumber])
+
+  useEffect(() => {
+    if (!shouldShowShootModePrompt) {
+      setShootModeProgress(0)
+    }
+  }, [shouldShowShootModePrompt])
+
+  const handleEnterShootMode = useCallback(() => {
+    if (!shootModeButtonUnlocked) return
+    setShootModeActive(true)
+  }, [shootModeButtonUnlocked])
 
   useEffect(() => {
     if (screen !== 'game' || !lobbyState.inLobby) return
@@ -671,11 +932,73 @@ function App() {
         </div>
       )}
       <div className="compass-widget" aria-label={`Boussole, direction ${cameraDirectionLabel}`}>
-        <div className={`compass-widget__dir ${cameraFacingDirection === 'NORTH' ? 'active' : ''}`}>N</div>
-        <div className={`compass-widget__dir ${cameraFacingDirection === 'EAST' ? 'active' : ''}`}>E</div>
-        <div className={`compass-widget__dir ${cameraFacingDirection === 'SOUTH' ? 'active' : ''}`}>S</div>
-        <div className={`compass-widget__dir ${cameraFacingDirection === 'WEST' ? 'active' : ''}`}>W</div>
+        <button
+          type="button"
+          className={`compass-widget__dir ${cameraFacingDirection === 'NORTH' ? 'active' : ''}`}
+          onClick={() => handleCompassDirectionClick('NORTH')}
+          disabled={!canChooseCameraDirection}
+          aria-label="Orienter la camera vers le nord"
+        >
+          N
+        </button>
+        <button
+          type="button"
+          className={`compass-widget__dir ${cameraFacingDirection === 'EAST' ? 'active' : ''}`}
+          onClick={() => handleCompassDirectionClick('EAST')}
+          disabled={!canChooseCameraDirection}
+          aria-label="Orienter la camera vers l est"
+        >
+          E
+        </button>
+        <button
+          type="button"
+          className={`compass-widget__dir ${cameraFacingDirection === 'SOUTH' ? 'active' : ''}`}
+          onClick={() => handleCompassDirectionClick('SOUTH')}
+          disabled={!canChooseCameraDirection}
+          aria-label="Orienter la camera vers le sud"
+        >
+          S
+        </button>
+        <button
+          type="button"
+          className={`compass-widget__dir ${cameraFacingDirection === 'WEST' ? 'active' : ''}`}
+          onClick={() => handleCompassDirectionClick('WEST')}
+          disabled={!canChooseCameraDirection}
+          aria-label="Orienter la camera vers l ouest"
+        >
+          W
+        </button>
       </div>
+      {shouldShowShootModePrompt && (
+        <div className="shoot-mode-panel">
+          <button
+            type="button"
+            className="shoot-mode-panel__button"
+            onClick={handleEnterShootMode}
+            disabled={!shootModeButtonUnlocked}
+          >
+            Passer en mode tir
+          </button>
+          <div className="shoot-mode-panel__progress">
+            <div
+              className="shoot-mode-panel__progress-fill"
+              style={{ width: `${Math.round(shootModeProgress * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+      {shouldShowPlacementConfirmPrompt && (
+        <div className="shoot-mode-panel">
+          <button
+            type="button"
+            className="shoot-mode-panel__button shoot-mode-panel__button--confirm"
+            onClick={handleConfirmPlacement}
+            disabled={loading || localPlacementLocked}
+          >
+            Valider la flotte
+          </button>
+        </div>
+      )}
       {localPlacementCompleted && (
         <div className="placement-wait-banner">
           En attente du ou des ennemis...
@@ -684,26 +1007,46 @@ function App() {
       {gamePhase === 'PLACEMENT' && !localPlacementCompleted && (
         <div className="placement-panel">
           <div className="placement-panel__title">{`Placement manuel - Joueur ${localPlayerNumber}`}</div>
+          {showShipSelectionRow && (
+            <div className="placement-panel__row">
+              <label htmlFor="ship-select">Navire</label>
+              <select
+                id="ship-select"
+                value={selectedShipType}
+                onChange={(event) => setSelectedShipType(event.target.value)}
+                disabled={selectableShips.length === 0}
+              >
+                {selectableShips.map((ship) => (
+                  <option key={ship.type} value={ship.type}>
+                    {ship.label} ({ship.size} cases)
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleRemoveSelectedShip}
+                disabled={loading || localPlacementLocked || !canRemoveSelectedShip}
+              >
+                Retirer
+              </button>
+            </div>
+          )}
           <div className="placement-panel__row">
-            <label htmlFor="ship-select">Navire</label>
-            <select
-              id="ship-select"
-              value={selectedShipType}
-              onChange={(event) => setSelectedShipType(event.target.value)}
-              disabled={remainingShips.length === 0}
+            <button
+              type="button"
+              className={removalModeEnabled ? 'active' : ''}
+              onClick={() => setRemovalModeEnabled((value) => !value)}
+              disabled={localPlacementLocked}
             >
-              {remainingShips.map((ship) => (
-                <option key={ship.type} value={ship.type}>
-                  {ship.label} ({ship.size} cases)
-                </option>
-              ))}
-            </select>
+              {removalModeEnabled ? 'Suppression active' : 'Mode suppression'}
+            </button>
           </div>
           <div className="placement-panel__row">
             <button
               type="button"
               className={placementOrientation === 'EAST' || placementOrientation === 'WEST' ? 'active' : ''}
               onClick={() => setPlacementOrientation('EAST')}
+              disabled={removalModeEnabled}
             >
               Horizontal
             </button>
@@ -711,13 +1054,16 @@ function App() {
               type="button"
               className={placementOrientation === 'SOUTH' || placementOrientation === 'NORTH' ? 'active' : ''}
               onClick={() => setPlacementOrientation('SOUTH')}
+              disabled={removalModeEnabled}
             >
               Vertical
             </button>
           </div>
           <div className="placement-panel__hint">
             {remainingShips.length > 0
-              ? `Cliquez sur la grille ${expectedOwnBoardId} pour poser ${selectedShipLabel}.`
+              ? (removalModeEnabled
+                ? `Mode suppression: cliquez un bateau sur la grille ${expectedOwnBoardId}.`
+                : `Cliquez sur la grille ${expectedOwnBoardId} pour poser ${selectedShipLabel}.`)
               : `Tous les navires du joueur ${currentPlayer} sont poses.`}
           </div>
         </div>
@@ -732,9 +1078,9 @@ function App() {
         aiBoardIds={aiBoardIds}
         duelAiFocus={isDuelWithAi}
         gamePhase={gamePhase}
-        topDownView={isPlayerInShootMode}
+        topDownView={isPlayerInShootMode && shootModeActive}
         ownBoardId={clientOwnBoardId}
-        cameraDirection={cameraDirection}
+        cameraDirection={effectiveCameraDirection}
         cameraStateKey={cameraStateKey}
         boardSize={boardSize}
         boardStatesById={boardStatesById}

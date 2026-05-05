@@ -137,6 +137,49 @@ function computeModelBounds(root) {
 /** Marge (Z local plateau) entre le bas du mesh et le plan de grille (z ≈ 0). */
 const GRID_SURFACE_MARGIN = 0.028
 
+function isShipLikeCell(cell) {
+  return cell === 'SHIP' || cell === 'HIT' || cell === 'SUNK'
+}
+
+function buildShipComponentIndex(cellStates, cells) {
+  if (!Array.isArray(cellStates) || cells <= 0) return new Map()
+  const visited = new Set()
+  const componentByCell = new Map()
+  let componentId = 0
+
+  const keyOf = (x, y) => `${x},${y}`
+  for (let y = 0; y < cells; y += 1) {
+    for (let x = 0; x < cells; x += 1) {
+      if (!isShipLikeCell(cellStates?.[y]?.[x])) continue
+      const startKey = keyOf(x, y)
+      if (visited.has(startKey)) continue
+      componentId += 1
+      const stack = [[x, y]]
+      visited.add(startKey)
+      componentByCell.set(startKey, componentId)
+      while (stack.length > 0) {
+        const [cx, cy] = stack.pop()
+        const neighbors = [
+          [cx + 1, cy],
+          [cx - 1, cy],
+          [cx, cy + 1],
+          [cx, cy - 1],
+        ]
+        for (const [nx, ny] of neighbors) {
+          if (nx < 0 || nx >= cells || ny < 0 || ny >= cells) continue
+          if (!isShipLikeCell(cellStates?.[ny]?.[nx])) continue
+          const nextKey = keyOf(nx, ny)
+          if (visited.has(nextKey)) continue
+          visited.add(nextKey)
+          componentByCell.set(nextKey, componentId)
+          stack.push([nx, ny])
+        }
+      }
+    }
+  }
+  return componentByCell
+}
+
 /**
  * AABB des sommets des meshes sous `root`, dans l'espace local du parent de `root`
  * (repère WaterBoard : XY = grille, +Z = au-dessus de l'eau).
@@ -185,7 +228,7 @@ function ShipInstance({
     applyOpacity(clone, opacity)
   }, [clone, opacity])
 
-  const { centerX, centerY, length, orientation } = segment
+  const { centerX, centerY, length, orientation, direction } = segment
   const rawX = flipColumns ? cells - 1 - centerX : centerX
   const rawY = flipRows ? centerY : cells - 1 - centerY
   const px = -half + (rawX + 0.5) * cellSize
@@ -195,12 +238,19 @@ function ShipInstance({
   const s = targetLength / Math.max(modelInfo.horizontalSpan, 1e-6)
   /** Ligne du navire : +π/2 sur Z aligne la longueur du FBX sur l’axe Y de la grille (vertical). */
   const rotZAlongLine = orientation === 'HORIZONTAL' ? Math.PI / 2 : 0
+  const facingOffsetByDirection = {
+    EAST: Math.PI,
+    SOUTH: Math.PI,
+    WEST: 0,
+    NORTH: 0,
+  }
+  const facingOffset = facingOffsetByDirection[direction] ?? Math.PI
   /**
    * FBX souvent Y-up : on aligne Y modèle sur Z monde (au-dessus de l’eau).
    * +π/2 (et non −π/2) remet le pont au-dessus du plan d’eau pour dacar2.
    * +π sur Z retourne la proue pour suivre le sens de la ligne sur la grille.
    */
-  const rotZ = rotZAlongLine + Math.PI
+  const rotZ = rotZAlongLine + facingOffset
 
   const offsetX = -modelInfo.center.x * s
   const offsetY = -modelInfo.center.y * s
@@ -238,6 +288,7 @@ function ShipInstance({
 function FleetShipMeshesInner({
   cellStates,
   previewCells,
+  recentImpacts,
   cells,
   half,
   cellSize,
@@ -262,6 +313,41 @@ function FleetShipMeshesInner({
     return [...placed, preview]
   }, [cellStates, cells, previewCells, showPreviewGhost])
 
+  const impactedSegmentKeys = useMemo(() => {
+    if (!recentImpacts?.length) return new Set()
+    const activeImpacts = recentImpacts.filter((impact) => {
+      return impact.type === 'HIT' || impact.type === 'SUNK'
+    })
+    if (activeImpacts.length === 0) return new Set()
+    const componentByCell = buildShipComponentIndex(cellStates, cells)
+    const impactedComponentIds = new Set(
+      activeImpacts
+        .map((impact) => componentByCell.get(`${impact.x},${impact.y}`))
+        .filter((id) => Number.isInteger(id)),
+    )
+    if (impactedComponentIds.size === 0) return new Set()
+    const impacted = new Set()
+    for (const segment of segments) {
+      if (segment.ghost) continue
+      for (let y = segment.minY; y <= segment.maxY; y += 1) {
+        for (let x = segment.minX; x <= segment.maxX; x += 1) {
+          const componentId = componentByCell.get(`${x},${y}`)
+          if (impactedComponentIds.has(componentId)) {
+            impacted.add(segment.key)
+            break
+          }
+        }
+        if (impacted.has(segment.key)) break
+      }
+    }
+    return impacted
+  }, [recentImpacts, segments, cellStates, cells])
+
+  const hasActiveDamageFx = useMemo(
+    () => Array.isArray(recentImpacts) && recentImpacts.some((impact) => impact.type === 'HIT' || impact.type === 'SUNK'),
+    [recentImpacts],
+  )
+
   return segments.map((segment) => (
     <ShipInstance
       key={segment.key}
@@ -273,7 +359,7 @@ function FleetShipMeshesInner({
       cells={cells}
       flipColumns={flipColumns}
       flipRows={flipRows}
-      opacity={segment.ghost ? 0.42 : 1}
+      opacity={segment.ghost ? 0.42 : impactedSegmentKeys.has(segment.key) ? (hasActiveDamageFx ? 0.08 : 0.24) : 1}
     />
   ))
 }

@@ -267,16 +267,31 @@
   border: 1px solid rgba(127, 228, 243, 0.72);
   background: rgba(4, 18, 29, 0.76);
   backdrop-filter: blur(10px);
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .compass-widget__dir {
   position: absolute;
+  border: 0;
+  background: transparent;
+  padding: 3px 5px;
   color: rgba(219, 251, 255, 0.72);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.6px;
   transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: color 150ms ease, text-shadow 150ms ease, transform 150ms ease;
+}
+
+.compass-widget__dir:hover:not(:disabled) {
+  color: #f4ffff;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.compass-widget__dir:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .compass-widget__dir.active {
@@ -304,6 +319,85 @@
 .compass-widget__dir:nth-child(4) {
   top: 50%;
   left: 18%;
+}
+
+.shoot-mode-panel {
+  position: absolute;
+  right: 112px;
+  bottom: 20px;
+  z-index: 12;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shoot-mode-panel__button {
+  border: 1px solid rgba(127, 228, 243, 0.86);
+  background: rgba(6, 30, 44, 0.95);
+  color: #e8fcff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.shoot-mode-panel__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
+  background: rgba(8, 39, 56, 0.98);
+}
+
+.shoot-mode-panel__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+@keyframes confirmPulseStrong {
+  0%,
+  78%,
+  100% {
+    box-shadow: 0 0 0 rgba(89, 215, 255, 0);
+    filter: brightness(1);
+    transform: translateY(0) scale(1);
+  }
+  85% {
+    box-shadow: 0 0 18px rgba(89, 215, 255, 0.92), 0 0 34px rgba(179, 245, 255, 0.68);
+    filter: brightness(1.42);
+    transform: translateY(-1px) scale(1.06);
+  }
+  92% {
+    box-shadow: 0 0 26px rgba(89, 215, 255, 1), 0 0 48px rgba(179, 245, 255, 0.84);
+    filter: brightness(1.62);
+    transform: translateY(-1px) scale(1.09);
+  }
+}
+
+.shoot-mode-panel__button--confirm {
+  animation: confirmPulseStrong 2s ease-in-out infinite;
+}
+
+.shoot-mode-panel__button--confirm:disabled {
+  animation: none;
+}
+
+.shoot-mode-panel__progress {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 228, 243, 0.55);
+  background: rgba(4, 18, 29, 0.72);
+}
+
+.shoot-mode-panel__progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #59d7ff, #b3f5ff);
+  transition: width 80ms linear;
 }
 
 .menu-screen {
@@ -712,6 +806,7 @@
   .shot-feedback--error,
   .turn-banner,
   .compass-widget,
+  .shoot-mode-panel,
   .placement-wait-banner,
   .placement-panel,
   .layout-controls,
@@ -723,6 +818,10 @@
     right: auto;
     margin: 12px 14px 0;
     max-width: none;
+  }
+
+  .shoot-mode-panel {
+    width: auto;
   }
 }
 

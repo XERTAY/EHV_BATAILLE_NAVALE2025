@@ -7,26 +7,6 @@ import WaterBoard from './WaterBoard'
 
 const CAMERA_PRESET_STORAGE_PREFIX = 'bataille-navale:camera-preset:'
 
-function cameraInFrontOfBoard(focusBoard, direction = null) {
-  const focusX = focusBoard?.position?.[0] ?? 0
-  const focusZ = focusBoard?.position?.[2] ?? 0
-  const distance = 170
-  const cameraY = 150
-
-  if (direction === 'NORTH') return [focusX, cameraY, focusZ - distance]
-  if (direction === 'SOUTH') return [focusX, cameraY, focusZ + distance]
-  if (direction === 'EAST') return [focusX + distance, cameraY, focusZ]
-  if (direction === 'WEST') return [focusX - distance, cameraY, focusZ]
-
-  if (Math.abs(focusX) > Math.abs(focusZ)) {
-    const directionX = focusX >= 0 ? 1 : -1
-    return [focusX + directionX * distance, cameraY, focusZ]
-  }
-
-  const directionZ = focusZ >= 0 ? 1 : -1
-  return [focusX, cameraY, focusZ + directionZ * distance]
-}
-
 function cameraTopDownOverBoard(focusX, focusZ, direction = null) {
   const altitude = 230
   const offset = 1.2
@@ -74,6 +54,7 @@ function PerformanceProbe({ enabled, waveMode }) {
 
 function CameraDirector({
   controlsRef,
+  focusBoard,
   focusX,
   focusZ,
   battleView,
@@ -86,6 +67,15 @@ function CameraDirector({
   const previousBattleRef = useRef(battleView)
   const initializedRef = useRef(false)
   const previousDirectionRef = useRef(null)
+
+  const inferDirectionFromBoard = () => {
+    const boardX = focusBoard?.position?.[0] ?? focusX
+    const boardZ = focusBoard?.position?.[2] ?? focusZ
+    if (Math.abs(boardX) >= Math.abs(boardZ)) {
+      return boardX >= 0 ? 'EAST' : 'WEST'
+    }
+    return boardZ >= 0 ? 'SOUTH' : 'NORTH'
+  }
 
   const savePreset = () => {
     if (!cameraStateKey || !controlsRef.current) return
@@ -125,46 +115,107 @@ function CameraDirector({
     }
   }
 
+  const startArcTransition = (toPosition, toTarget, direction, arcSideMultiplier = 1) => {
+    const fromPosition = new Vector3(camera.position.x, camera.position.y, camera.position.z)
+    const fromTarget = controlsRef.current
+      ? new Vector3(controlsRef.current.target.x, controlsRef.current.target.y, controlsRef.current.target.z)
+      : new Vector3(focusX, 0, focusZ)
+
+    const baseSideSign = direction === 'EAST' || direction === 'SOUTH' ? 1 : -1
+    const sideSign = baseSideSign * (arcSideMultiplier >= 0 ? 1 : -1)
+    const sideOffset = 75
+    const lift = 35
+    const midpoint = new Vector3(
+      (fromPosition.x + toPosition.x) * 0.5 + sideSign * sideOffset,
+      Math.max(fromPosition.y, toPosition.y) + lift,
+      (fromPosition.z + toPosition.z) * 0.5 - sideSign * sideOffset * 0.35,
+    )
+    const targetMidpoint = new Vector3(
+      (fromTarget.x + toTarget.x) * 0.5 + sideSign * sideOffset * 0.25,
+      (fromTarget.y + toTarget.y) * 0.5,
+      (fromTarget.z + toTarget.z) * 0.5 - sideSign * sideOffset * 0.2,
+    )
+
+    transitionRef.current = {
+      elapsed: 0,
+      duration: 1.15,
+      fromPosition,
+      fromTarget,
+      toPosition,
+      toTarget,
+      arcMidpoint: midpoint,
+      arcTargetMidpoint: targetMidpoint,
+    }
+  }
+
   useEffect(() => {
     const targetLookAt = new Vector3(focusX, 0, focusZ)
-    const nextPosition = battleView
-      ? (() => {
-        const [x, y, z] = cameraTopDownOverBoard(focusX, focusZ, cameraDirection)
-        return new Vector3(x, y, z)
-      })()
-      : (() => {
-        const base = cameraInFrontOfBoard({ position: [focusX, 0, focusZ] }, cameraDirection)
-        return new Vector3(base[0], base[1], base[2])
-      })()
+    const effectiveDirection = battleView ? inferDirectionFromBoard() : cameraDirection
+    const nextPosition = (() => {
+      const [x, y, z] = cameraTopDownOverBoard(focusX, focusZ, effectiveDirection)
+      return new Vector3(x, y, z)
+    })()
 
     if (!initializedRef.current) {
-      camera.position.copy(nextPosition)
-      if (controlsRef.current) {
-        controlsRef.current.target.copy(targetLookAt)
-        controlsRef.current.update()
-      } else {
-        camera.lookAt(targetLookAt)
-      }
       initializedRef.current = true
+      // Evite toute teleportation: meme la toute premiere mise en place passe
+      // par une interpolation depuis la camera courante.
+      startTransition(nextPosition, targetLookAt, 0.55)
+      previousBattleRef.current = battleView
       return
     }
 
     if (battleView && previousBattleRef.current !== battleView) {
       savePreset()
     }
-    startTransition(nextPosition, targetLookAt)
+    // En entree/sortie de tir: transition en arc sur des cotes opposes.
+    if (battleView && !previousBattleRef.current) {
+      startArcTransition(nextPosition, targetLookAt, effectiveDirection, -1)
+    } else if (!battleView && previousBattleRef.current) {
+      startArcTransition(nextPosition, targetLookAt, effectiveDirection, 1)
+    } else {
+      // Animation fluide mais rapide: rotation et travelling demarrent ensemble.
+      startTransition(nextPosition, targetLookAt, battleView ? 0.45 : 0.6)
+    }
     previousBattleRef.current = battleView
-  }, [camera, controlsRef, focusX, focusZ, battleView, cameraDirection, cameraStateKey])
+  }, [camera, controlsRef, focusBoard, focusX, focusZ, battleView, cameraDirection, cameraStateKey])
 
   useFrame((_, delta) => {
     const transition = transitionRef.current
     if (!transition) return
     transition.elapsed += delta
     const t = Math.min(1, transition.elapsed / transition.duration)
-    const eased = 1 - ((1 - t) ** 3)
-    camera.position.lerpVectors(transition.fromPosition, transition.toPosition, eased)
+    const eased = transition.arcMidpoint
+      ? (t < 0.5 ? 4 * t * t * t : 1 - (((-2 * t + 2) ** 3) / 2))
+      : 1 - ((1 - t) ** 3)
+    if (transition.arcMidpoint) {
+      // Courbe quadratique (Bezier) pour un retour visuel en arc.
+      const p0 = transition.fromPosition
+      const p1 = transition.arcMidpoint
+      const p2 = transition.toPosition
+      const oneMinus = 1 - eased
+      camera.position.set(
+        oneMinus * oneMinus * p0.x + 2 * oneMinus * eased * p1.x + eased * eased * p2.x,
+        oneMinus * oneMinus * p0.y + 2 * oneMinus * eased * p1.y + eased * eased * p2.y,
+        oneMinus * oneMinus * p0.z + 2 * oneMinus * eased * p1.z + eased * eased * p2.z,
+      )
+    } else {
+      camera.position.lerpVectors(transition.fromPosition, transition.toPosition, eased)
+    }
     if (controlsRef.current) {
-      controlsRef.current.target.lerpVectors(transition.fromTarget, transition.toTarget, eased)
+      if (transition.arcTargetMidpoint) {
+        const t0 = transition.fromTarget
+        const t1 = transition.arcTargetMidpoint
+        const t2 = transition.toTarget
+        const oneMinus = 1 - eased
+        controlsRef.current.target.set(
+          oneMinus * oneMinus * t0.x + 2 * oneMinus * eased * t1.x + eased * eased * t2.x,
+          oneMinus * oneMinus * t0.y + 2 * oneMinus * eased * t1.y + eased * eased * t2.y,
+          oneMinus * oneMinus * t0.z + 2 * oneMinus * eased * t1.z + eased * eased * t2.z,
+        )
+      } else {
+        controlsRef.current.target.lerpVectors(transition.fromTarget, transition.toTarget, eased)
+      }
       controlsRef.current.update()
     } else {
       const currentTarget = new Vector3().lerpVectors(transition.fromTarget, transition.toTarget, eased)
@@ -221,6 +272,10 @@ function BoardScene({
   const battleView = Boolean(topDownView)
   const focusBoard = useMemo(() => {
     if (!battleView) return ownBoard
+    const interactiveEnemyBoard = boards.find(
+      (board) => board.boardId !== ownBoardId && Boolean(interactiveBoards?.[board.boardId]),
+    )
+    if (interactiveEnemyBoard) return interactiveEnemyBoard
     if (boards.length === 2) {
       return boards.find((board) => board.boardId !== ownBoardId) ?? ownBoard
     }
@@ -230,7 +285,7 @@ function BoardScene({
   const focusZ = focusBoard?.position?.[2] ?? 0
   const cameraPosition = decorativeOnly
     ? [0, 130, 230]
-    : cameraInFrontOfBoard(focusBoard, cameraDirection)
+    : cameraTopDownOverBoard(focusX, focusZ, cameraDirection)
   const controlsRef = useRef(null)
 
   return (
@@ -250,6 +305,7 @@ function BoardScene({
       {!decorativeOnly && (
         <CameraDirector
           controlsRef={controlsRef}
+          focusBoard={focusBoard}
           focusX={focusX}
           focusZ={focusZ}
           battleView={battleView}
@@ -301,22 +357,18 @@ function BoardScene({
       {!decorativeOnly && (
         <OrbitControls
           ref={controlsRef}
-          minDistance={battleView ? 85 : 115}
-          maxDistance={battleView ? 300 : 380}
-          minPolarAngle={battleView ? 0.015 : 0.62}
-          maxPolarAngle={battleView ? 0.08 : 1.45}
+          minDistance={85}
+          maxDistance={420}
+          minPolarAngle={0.015}
+          maxPolarAngle={Math.PI - 0.05}
           enablePan
           screenSpacePanning
-          enableRotate={!battleView}
-          mouseButtons={
-            battleView
-              ? {
-                LEFT: MOUSE.PAN,
-                MIDDLE: MOUSE.DOLLY,
-                RIGHT: MOUSE.PAN,
-              }
-              : undefined
-          }
+          enableRotate
+          mouseButtons={{
+            LEFT: MOUSE.ROTATE,
+            MIDDLE: MOUSE.DOLLY,
+            RIGHT: MOUSE.PAN,
+          }}
         />
       )}
     </Canvas>

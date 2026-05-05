@@ -9,6 +9,10 @@ const EMPTY_PLACED_BY_PLAYER = () => ({
   3: [],
   4: [],
 })
+/**
+ * Rotation de placement en pivotant sur la case d'ancrage (x, y),
+ * dans le sens horaire.
+ */
 const ORIENTATION_SEQUENCE = ['EAST', 'SOUTH', 'WEST', 'NORTH']
 
 /**
@@ -35,18 +39,26 @@ export default function usePlacement({
   const [selectedShipType, setSelectedShipType] = useState('SHIP_0')
   const [placementOrientation, setPlacementOrientation] = useState('EAST')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
+  const [removalModeEnabled, setRemovalModeEnabled] = useState(false)
   const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState(() => EMPTY_PLACED_BY_PLAYER())
 
   const remainingShips = useMemo(() => {
     const alreadyPlaced = new Set(placedShipsByPlayer[currentPlayer] ?? [])
     return fleet.filter((ship) => !alreadyPlaced.has(ship.type))
   }, [placedShipsByPlayer, currentPlayer, fleet])
+  const placedShips = useMemo(() => {
+    const alreadyPlaced = new Set(placedShipsByPlayer[currentPlayer] ?? [])
+    return fleet.filter((ship) => alreadyPlaced.has(ship.type))
+  }, [placedShipsByPlayer, currentPlayer, fleet])
+  const selectableShips = useMemo(() => (
+    removalModeEnabled ? placedShips : remainingShips
+  ), [removalModeEnabled, placedShips, remainingShips])
 
   const effectiveSelectedShipType = useMemo(() => {
-    if (remainingShips.length === 0) return selectedShipType
-    if (remainingShips.some((ship) => ship.type === selectedShipType)) return selectedShipType
-    return remainingShips[0].type
-  }, [remainingShips, selectedShipType])
+    if (selectableShips.length === 0) return selectedShipType
+    if (selectableShips.some((ship) => ship.type === selectedShipType)) return selectedShipType
+    return selectableShips[0].type
+  }, [selectableShips, selectedShipType])
 
   const selectedShip = useMemo(
     () => fleet.find((ship) => ship.type === effectiveSelectedShipType) ?? fleet[0],
@@ -72,14 +84,14 @@ export default function usePlacement({
     for (let index = 0; index < selectedShip.size; index += 1) {
       const x = hoveredPlacementCell.x + direction.dx * index
       const y = hoveredPlacementCell.y + direction.dy * index
-      if (x >= 0 && x < boardSize && y >= 0 && y < boardSize) {
-        cells.push({ x, y })
-      }
+      const inBounds = x >= 0 && x < boardSize && y >= 0 && y < boardSize
+      cells.push({ x, y, inBounds, previewDirection: placementOrientation })
     }
     return cells
   }, [hoveredPlacementCell, selectedShip, placementOrientation, gamePhase, boardSize])
 
   const handlePlacementSuccess = useCallback((player, shipType) => {
+    setRemovalModeEnabled(false)
     setHoveredPlacementCell(null)
     setPlacedShipsByPlayer((value) => ({
       ...value,
@@ -87,9 +99,31 @@ export default function usePlacement({
     }))
   }, [])
 
+  const handlePlacementRemoval = useCallback((player, shipType) => {
+    setPlacedShipsByPlayer((value) => ({
+      ...value,
+      [player]: (value[player] ?? []).filter((type) => type !== shipType),
+    }))
+  }, [])
+
+  const syncPlacedShipsForPlayer = useCallback((player, shipTypes) => {
+    const normalized = Array.isArray(shipTypes) ? [...shipTypes].sort() : []
+    setPlacedShipsByPlayer((value) => {
+      const current = Array.isArray(value[player]) ? [...value[player]].sort() : []
+      if (current.length === normalized.length && current.every((type, index) => type === normalized[index])) {
+        return value
+      }
+      return {
+        ...value,
+        [player]: normalized,
+      }
+    })
+  }, [])
+
   const resetPlacement = useCallback(() => {
     setPlacedShipsByPlayer(EMPTY_PLACED_BY_PLAYER())
     setHoveredPlacementCell(null)
+    setRemovalModeEnabled(false)
     setSelectedShipType(fleet[0]?.type ?? 'SHIP_0')
     setPlacementOrientation('EAST')
   }, [fleet])
@@ -119,13 +153,18 @@ export default function usePlacement({
     selectedShipType: effectiveSelectedShipType,
     selectedShipLabel,
     selectedShipSize,
+    placedShips,
     setSelectedShipType,
     placementOrientation,
     setPlacementOrientation,
     rotatePlacementOrientationClockwise,
+    removalModeEnabled,
+    setRemovalModeEnabled,
     remainingShips,
     placementPreview,
     handlePlacementSuccess,
+    handlePlacementRemoval,
+    syncPlacedShipsForPlayer,
     handleCellHover,
     resetPlacement,
   }

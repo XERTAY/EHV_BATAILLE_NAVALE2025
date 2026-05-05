@@ -8,7 +8,14 @@ function GridLabelList({ axis, labels, half, cellSize, swapLabelSide, boardId })
     const kind = isColumn ? 'col' : 'row'
 
     return (
-      <Html key={`${boardId}-${kind}-${label}`} position={[x, 1.5, z]} center transform sprite>
+      <Html
+        key={`${boardId}-${kind}-${label}`}
+        position={[x, 1.5, z]}
+        center
+        transform
+        sprite
+        zIndexRange={[0, 2]}
+      >
         <span className="board-label">{label}</span>
       </Html>
     )
