@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ehv.api.dto.FireRequest;
 import com.ehv.api.dto.PlaceShipRequest;
+import com.ehv.api.dto.ConfirmPlacementRequest;
+import com.ehv.api.dto.RemoveShipRequest;
 import com.ehv.api.dto.ResetGameRequest;
 import com.ehv.api.service.DuelGameService;
 import com.ehv.api.view.ActionResponse;
@@ -52,6 +54,16 @@ public class GameController {
     @PostMapping("/game/place")
     public ActionResponse place(@RequestBody PlaceShipRequest request) {
         return duelGameService.placeShip(request);
+    }
+
+    @PostMapping("/game/placement/remove")
+    public ActionResponse removeShip(@RequestBody RemoveShipRequest request) {
+        return duelGameService.removePlacedShip(request);
+    }
+
+    @PostMapping("/game/placement/confirm")
+    public ActionResponse confirmPlacement(@RequestBody ConfirmPlacementRequest request) {
+        return duelGameService.confirmPlacement(request);
     }
 
     @PostMapping("/game/auto-place")

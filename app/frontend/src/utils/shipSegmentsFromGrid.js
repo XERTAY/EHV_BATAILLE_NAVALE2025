@@ -132,11 +132,12 @@ export function buildPreviewSegment(previewCells, cells) {
   const maxX = Math.max(...xs)
   const minY = Math.min(...ys)
   const maxY = Math.max(...ys)
-  if (minX < 0 || maxX >= cells || minY < 0 || maxY >= cells) return null
 
-  const width = maxX - minX + 1
-  const height = maxY - minY + 1
-  const orientation = width >= height ? 'HORIZONTAL' : 'VERTICAL'
+  const first = previewCells[0]
+  const last = previewCells[previewCells.length - 1]
+  const dx = Math.abs((last?.x ?? first.x) - first.x)
+  const dy = Math.abs((last?.y ?? first.y) - first.y)
+  const orientation = dx >= dy ? 'HORIZONTAL' : 'VERTICAL'
   const length = previewCells.length
   const centerX = (minX + maxX) / 2
   const centerY = (minY + maxY) / 2
@@ -154,6 +155,7 @@ export function buildPreviewSegment(previewCells, cells) {
     maxY,
     length,
     orientation,
+    direction: first?.previewDirection ?? null,
     centerX,
     centerY,
     ghost: true,

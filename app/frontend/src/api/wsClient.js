@@ -14,11 +14,18 @@ class WSClient {
     this.onOpen = null;
     this.onClose = null;
     this.onError = null;
+    this.pendingMessages = [];
   }
 
   connect() {
     this.ws = new WebSocket(WS_URL);
     this.ws.onopen = (event) => {
+      if (this.pendingMessages.length > 0) {
+        for (const payload of this.pendingMessages) {
+          this.ws.send(payload);
+        }
+        this.pendingMessages = [];
+      }
       if (this.onOpen) this.onOpen(event);
     };
     this.ws.onmessage = (event) => {
@@ -39,8 +46,13 @@ class WSClient {
   }
 
   send(obj) {
+    const payload = JSON.stringify(obj);
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(obj));
+      this.ws.send(payload);
+      return;
+    }
+    if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+      this.pendingMessages.push(payload);
     }
   }
 

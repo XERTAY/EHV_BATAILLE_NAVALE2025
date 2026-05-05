@@ -16,6 +16,8 @@ import java.util.stream.Stream;
 
 import com.ehv.api.dto.FireRequest;
 import com.ehv.api.dto.PlaceShipRequest;
+import com.ehv.api.dto.ConfirmPlacementRequest;
+import com.ehv.api.dto.RemoveShipRequest;
 import com.ehv.api.view.ActionResponse;
 import com.ehv.api.view.ActionResult;
 import com.ehv.api.view.BoardStateView;
@@ -51,6 +53,7 @@ public final class DuelGameService {
     private Integer winner;
     private final Map<Integer, Set<String>> placedShipsByPlayer = new LinkedHashMap<>();
     private final List<Integer> placementCompletionOrder = new ArrayList<>();
+    private final Map<Integer, Boolean> placementLockedByPlayer = new LinkedHashMap<>();
 
     public DuelGameService() {
         reset(10, List.of(5, 4, 3, 3, 2), null, false, null);
@@ -98,9 +101,32 @@ public final class DuelGameService {
         String shipType = normalizeShipType(request.shipType());
         placeShipOnBoard(request, shipType);
         placedShipsByPlayer.get(request.player()).add(shipType);
-        updatePlacementProgress(request.player());
+        currentPlayer = request.player();
         advanceUntilHumanOrTerminal();
         return buildActionResponse(ActionResult.PLACED, request.player());
+    }
+
+    public synchronized ActionResponse removePlacedShip(RemoveShipRequest request) {
+        ensurePhase(DuelPhase.PLACEMENT, "La suppression est disponible uniquement pendant la phase PLACEMENT");
+        validatePlayer(request.player());
+        ensurePlacementEditable(request.player());
+
+        String shipType = resolveShipTypeToRemove(request);
+        removeShipFromBoard(request.player(), shipType);
+        currentPlayer = request.player();
+        advanceUntilHumanOrTerminal();
+        return buildActionResponse(ActionResult.REMOVED, request.player());
+    }
+
+    public synchronized ActionResponse confirmPlacement(ConfirmPlacementRequest request) {
+        ensurePhase(DuelPhase.PLACEMENT, "La validation est disponible uniquement pendant la phase PLACEMENT");
+        validatePlayer(request.player());
+        if (!isHumanSlot(request.player())) {
+            throw new IllegalArgumentException("La validation manuelle n'est disponible que pour les joueurs humains.");
+        }
+        confirmPlacementForPlayer(request.player());
+        advanceUntilHumanOrTerminal();
+        return buildActionResponse(ActionResult.CONFIRMED, request.player());
     }
 
     public synchronized ActionResponse fireAt(FireRequest request) {
@@ -156,7 +182,9 @@ public final class DuelGameService {
             winner,
             boards,
             computePlayersAlive(),
-            computeAiPlayers()
+            computeAiPlayers(),
+            computePlacementLocked(),
+            computePlacedShipTypesByPlayer()
         );
     }
 
@@ -241,6 +269,7 @@ public final class DuelGameService {
         this.fleetSizes = newFleetSizes != null && !newFleetSizes.isEmpty()
             ? new ArrayList<>(newFleetSizes)
             : List.of(5, 4, 3, 3, 2);
+        validateFleetFitsBoardCapacity(this.boardSize, this.fleetSizes);
 
         this.FLEET = new LinkedHashMap<>();
         for (int index = 0; index < this.fleetSizes.size(); index++) {
@@ -263,8 +292,21 @@ public final class DuelGameService {
         placementCompletionOrder.clear();
         for (int i = 1; i <= playerCount; i++) {
             placedShipsByPlayer.put(i, new HashSet<>());
+            placementLockedByPlayer.put(i, false);
         }
         advanceUntilHumanOrTerminal();
+    }
+
+    private void validateFleetFitsBoardCapacity(int size, List<Integer> sizes) {
+        long boardCapacity = (long) size * (long) size;
+        long totalFleetCells = sizes.stream()
+            .mapToLong(value -> Math.max(1, value))
+            .sum();
+        if (totalFleetCells > boardCapacity) {
+            throw new IllegalArgumentException(
+                "Flotte invalide: " + totalFleetCells
+                    + " cases de navires pour une grille de " + boardCapacity + " cases.");
+        }
     }
 
     private void synchronizeApiStateFromGame() {
@@ -299,8 +341,10 @@ public final class DuelGameService {
 
         placedShipsByPlayer.clear();
         placementCompletionOrder.clear();
+        placementLockedByPlayer.clear();
         for (int p = 1; p <= playerCount; p++) {
             placedShipsByPlayer.put(p, collectPlacedShipTypes(p));
+            placementLockedByPlayer.put(p, game.getPlayers().get(p - 1).isReady());
         }
     }
 
@@ -318,6 +362,24 @@ public final class DuelGameService {
             ais.add(getPlayerById(p).isAI());
         }
         return List.copyOf(ais);
+    }
+
+    private List<Boolean> computePlacementLocked() {
+        List<Boolean> locked = new ArrayList<>(playerCount);
+        for (int p = 1; p <= playerCount; p++) {
+            locked.add(Boolean.TRUE.equals(placementLockedByPlayer.get(p)));
+        }
+        return List.copyOf(locked);
+    }
+
+    private List<List<String>> computePlacedShipTypesByPlayer() {
+        List<List<String>> placed = new ArrayList<>(playerCount);
+        for (int p = 1; p <= playerCount; p++) {
+            List<String> shipTypes = new ArrayList<>(placedShipsByPlayer.getOrDefault(p, Set.of()));
+            shipTypes.sort(String::compareTo);
+            placed.add(List.copyOf(shipTypes));
+        }
+        return List.copyOf(placed);
     }
 
     /** Premier slot humain encore en jeu pour la vue client (hotseat sur poste unique). */
@@ -370,6 +432,7 @@ public final class DuelGameService {
     private void validatePlacementRequest(PlaceShipRequest request) {
         ensurePhase(DuelPhase.PLACEMENT, "Impossible de placer des navires hors phase PLACEMENT");
         validatePlayer(request.player());
+        ensurePlacementEditable(request.player());
         if (!isHumanSlot(request.player())) {
             throw new IllegalArgumentException(
                 "L'ordinateur gere le placement pour les joueurs IA. Action refusee pour ce numero de joueur.");
@@ -399,12 +462,15 @@ public final class DuelGameService {
     }
 
     private void updatePlacementProgress(int player) {
+        if (phase != DuelPhase.PLACEMENT) {
+            return;
+        }
         if (isFleetComplete(player) && !placementCompletionOrder.contains(player)) {
             placementCompletionOrder.add(player);
         }
         boolean allDone = true;
         for (int p = 1; p <= playerCount; p++) {
-            if (!isFleetComplete(p)) {
+            if (!Boolean.TRUE.equals(placementLockedByPlayer.get(p))) {
                 allDone = false;
                 break;
             }
@@ -416,7 +482,7 @@ public final class DuelGameService {
         }
         game.setState(GameState.PLAYING);
         phase = DuelPhase.BATTLE;
-        currentPlayer = placementCompletionOrder.isEmpty() ? 1 : placementCompletionOrder.get(0);
+        currentPlayer = 1;
     }
 
     private int nextPlayerAwaitingPlacement(int from) {
@@ -455,17 +521,16 @@ public final class DuelGameService {
             AI ai = (AI) current;
 
             if (phase == DuelPhase.PLACEMENT) {
-                if (isFleetComplete(currentPlayer)) {
-                    updatePlacementProgress(currentPlayer);
+                if (Boolean.TRUE.equals(placementLockedByPlayer.get(currentPlayer))) {
+                    currentPlayer = nextPlayerAwaitingPlacement(currentPlayer);
                     continue;
                 }
                 String nextShip = nextMissingShipType(currentPlayer);
                 if (nextShip == null) {
-                    updatePlacementProgress(currentPlayer);
+                    confirmPlacementForPlayer(currentPlayer);
                     continue;
                 }
                 placeShipRandomly(currentPlayer, nextShip);
-                updatePlacementProgress(currentPlayer);
                 continue;
             }
 
@@ -646,7 +711,66 @@ public final class DuelGameService {
             case ALREADY_HIT -> "Case deja touchee";
             case ALREADY_MISS -> "Case deja visee (a l'eau)";
             case PLACED -> "Navire place avec succes";
+            case REMOVED -> "Navire retire avec succes";
+            case CONFIRMED -> "Placement valide";
         };
+    }
+
+    private void ensurePlacementEditable(int player) {
+        if (Boolean.TRUE.equals(placementLockedByPlayer.get(player))) {
+            throw new IllegalArgumentException("Placement deja valide pour ce joueur, action irreversible.");
+        }
+    }
+
+    private void confirmPlacementForPlayer(int player) {
+        ensurePlacementEditable(player);
+        if (!isFleetComplete(player)) {
+            throw new IllegalArgumentException("Impossible de valider: tous les navires ne sont pas encore places.");
+        }
+        placementLockedByPlayer.put(player, true);
+        getPlayerById(player).setReady(true);
+        updatePlacementProgress(player);
+    }
+
+    private String resolveShipTypeToRemove(RemoveShipRequest request) {
+        if (request.shipType() != null && !request.shipType().isBlank()) {
+            String shipType = normalizeShipType(request.shipType());
+            if (!placedShipsByPlayer.get(request.player()).contains(shipType)) {
+                throw new IllegalArgumentException("Ce navire n'est pas place.");
+            }
+            return shipType;
+        }
+        if (request.x() == null || request.y() == null) {
+            throw new IllegalArgumentException("Pour retirer un navire, indiquez shipType ou bien x/y.");
+        }
+        validateCoordinateBounds(request.x(), request.y());
+        Coordinate target = new Coordinate(request.x(), request.y());
+        for (Ship ship : getPlayerById(request.player()).getFleet().getShips()) {
+            if (ship.getCoordinates().contains(target)) {
+                return normalizeShipType(ship.getName());
+            }
+        }
+        throw new IllegalArgumentException("Aucun navire trouve sur cette case.");
+    }
+
+    private void removeShipFromBoard(int player, String shipType) {
+        Player current = getPlayerById(player);
+        Ship shipToRemove = null;
+        for (Ship ship : current.getFleet().getShips()) {
+            if (shipType.equalsIgnoreCase(ship.getName())) {
+                shipToRemove = ship;
+                break;
+            }
+        }
+        if (shipToRemove == null) {
+            throw new IllegalArgumentException("Ce navire n'est pas place.");
+        }
+        for (Coordinate coordinate : shipToRemove.getCoordinates()) {
+            current.getGrid().setCell(coordinate, CellStatus.EMPTY);
+        }
+        current.getFleet().removeShip(shipToRemove);
+        placedShipsByPlayer.get(player).remove(shipType);
+        current.setReady(false);
     }
 
     private Player getPlayerById(int player) {

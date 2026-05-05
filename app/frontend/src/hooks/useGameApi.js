@@ -1,5 +1,16 @@
 import { useCallback, useState } from 'react'
-import { fireAt, getGameState, listSaves, loadGame, placeShip, resetGame, runAiStep, saveGame } from '../api/gameApi'
+import {
+  confirmPlacement,
+  fireAt,
+  getGameState,
+  listSaves,
+  loadGame,
+  placeShip,
+  removePlacedShip,
+  resetGame,
+  runAiStep,
+  saveGame,
+} from '../api/gameApi'
 
 export default function useGameApi() {
   const [gameState, setGameState] = useState(null)
@@ -51,6 +62,36 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const result = await fireAt(payload)
+      setGameState(result.state)
+      return result
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const removeShipAction = useCallback(async (payload) => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const result = await removePlacedShip(payload)
+      setGameState(result.state)
+      return result
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const confirmPlacementAction = useCallback(async (payload) => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const result = await confirmPlacement(payload)
       setGameState(result.state)
       return result
     } catch (error) {
@@ -144,6 +185,8 @@ export default function useGameApi() {
     errorMessage,
     bootstrapGame,
     placeShipAction,
+    removeShipAction,
+    confirmPlacementAction,
     fireAtAction,
     listSavesAction,
     loadGameAction,

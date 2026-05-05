@@ -52,6 +52,20 @@ export function placeShip(payload) {
   })
 }
 
+export function removePlacedShip(payload) {
+  return callApi('/game/placement/remove', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function confirmPlacement(payload) {
+  return callApi('/game/placement/confirm', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function fireAt(payload) {
   const body = {
     player: payload.player,

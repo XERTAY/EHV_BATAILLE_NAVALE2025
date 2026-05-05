@@ -13,6 +13,7 @@ function GameSetupMenu({
   loading,
   wsConnected,
   lobby,
+  statusMessage,
 }) {
   const [menuStep, setMenuStep] = useState('home')
   const [fleetModalOpen, setFleetModalOpen] = useState(false)
@@ -395,6 +396,7 @@ function GameSetupMenu({
             </button>
           )}
         </div>
+        {statusMessage && <div className="menu-status">{statusMessage}</div>}
 
         {fleetModalOpen && (
           <div className="menu-modal-backdrop" role="presentation" onClick={() => setFleetModalOpen(false)}>
@@ -433,6 +435,7 @@ function GameSetupMenu({
                   Ajouter un navire
                 </button>
               </div>
+              {statusMessage && <div className="menu-status">{statusMessage}</div>}
             </div>
           </div>
         )}
