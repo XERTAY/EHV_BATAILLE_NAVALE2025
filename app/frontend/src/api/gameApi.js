@@ -19,6 +19,7 @@ export function resetGame(
   playerCount = 2,
   withAI = false,
   humanPlayers,
+  lobbyGameId,
 ) {
   const normalizedCount = playerCount === 4 ? 4 : 2
   const body = {
@@ -35,34 +36,57 @@ export function resetGame(
     body.withAI = false
     body.humanPlayers = null
   }
+  if (lobbyGameId != null && String(lobbyGameId).trim() !== '') {
+    body.gameId = String(lobbyGameId).trim()
+  }
   return callApi('/game/reset', {
     method: 'POST',
     body: JSON.stringify(body),
   })
 }
 
-export function getGameState(player) {
-  return callApi(`/game/state?player=${player}`)
+export function getGameState(player, lobbyGameId) {
+  const params = new URLSearchParams({ player: String(player) })
+  if (lobbyGameId != null && String(lobbyGameId).trim() !== '') {
+    params.set('gameId', String(lobbyGameId).trim())
+  }
+  return callApi(`/game/state?${params.toString()}`)
 }
 
 export function placeShip(payload) {
+  const body = { ...payload }
+  if (payload?.gameId != null && String(payload.gameId).trim() !== '') {
+    body.gameId = String(payload.gameId).trim()
+  } else {
+    delete body.gameId
+  }
   return callApi('/game/place', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
 }
 
 export function removePlacedShip(payload) {
+  const body = { ...payload }
+  if (payload?.gameId != null && String(payload.gameId).trim() !== '') {
+    body.gameId = String(payload.gameId).trim()
+  } else {
+    delete body.gameId
+  }
   return callApi('/game/placement/remove', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
 }
 
 export function confirmPlacement(payload) {
+  const body = { player: payload.player }
+  if (payload?.gameId != null && String(payload.gameId).trim() !== '') {
+    body.gameId = String(payload.gameId).trim()
+  }
   return callApi('/game/placement/confirm', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
 }
 
@@ -84,8 +108,13 @@ export function fireAt(payload) {
   })
 }
 
-export function runAiStep() {
-  return callApi('/game/ai-step', {
+/** @param {string} [lobbyGameId] si partie en ligne : notifie l autre client via WebSocket apres le coup IA */
+export function runAiStep(lobbyGameId) {
+  const params =
+    lobbyGameId != null && String(lobbyGameId).trim() !== ''
+      ? `?gameId=${encodeURIComponent(String(lobbyGameId).trim())}`
+      : ''
+  return callApi(`/game/ai-step${params}`, {
     method: 'POST',
   })
 }

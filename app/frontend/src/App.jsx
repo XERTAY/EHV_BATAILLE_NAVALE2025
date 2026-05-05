@@ -37,11 +37,15 @@ const DEFAULT_SETUP = {
   humanPlayers: 2,
   withAI: false,
 }
-const AI_STEP_DELAY_MS = 300
+/** Cadence des coups IA : alignee sur ENEMY_IMPACT_STAGGER_MS pour que la grille defenseur reste lisible. */
+const AI_STEP_DELAY_MS = 1000
 const SHOOT_MODE_UNLOCK_DELAY_MS = 1000
 const SHOOT_MODE_AUTO_ENTER_MS = 7000
 const IMPACT_FLASH_MS = 3000
-const ENEMY_IMPACT_REVEAL_DELAY_MS = 1000
+/** Ecart minimum entre deux impacts adverses visibles sur votre grille (rafales ou reseau rapide). Le premier coup d'une serie s'affiche tout de suite. */
+const ENEMY_IMPACT_STAGGER_MS = 1000
+/** Synchronisation HTTP reguliere en lobby (complement des messages WebSocket GAME_STATE_UPDATE). */
+const LOBBY_SYNC_POLL_MS = 400
 
 function cloneCellsGrid(cells) {
   return cells.map((row) => [...row])
@@ -172,7 +176,7 @@ function App() {
     }
   }, [])
 
-  const scheduleNextImpactReveal = useCallback(() => {
+  const scheduleNextImpactReveal = useCallback((delayBeforeRevealMs = ENEMY_IMPACT_STAGGER_MS) => {
     if (impactRevealInProgressRef.current) return
     if (pendingImpactRevealsRef.current.length === 0) return
     impactRevealInProgressRef.current = true
@@ -187,8 +191,10 @@ function App() {
       }
       delayedOwnBoardTimerRef.current = null
       impactRevealInProgressRef.current = false
-      scheduleNextImpactReveal()
-    }, ENEMY_IMPACT_REVEAL_DELAY_MS)
+      if (pendingImpactRevealsRef.current.length > 0) {
+        scheduleNextImpactReveal(ENEMY_IMPACT_STAGGER_MS)
+      }
+    }, delayBeforeRevealMs)
   }, [])
 
   const boards = useMemo(() => {
@@ -387,6 +393,8 @@ function App() {
           effectiveSetup.playerCount,
           effectiveSetup.withAI,
           effectiveSetup.humanPlayers,
+          keepLobby && options.lobbyGameId ? options.lobbyGameId : null,
+          options.bootstrapViewerPlayer ?? 1,
         )
       }
       resetPlacement()
@@ -453,11 +461,15 @@ function App() {
           return
         }
         if (removalModeEnabled) {
-          result = await removeShipAction({
+          const removePayload = {
             player: localPlayerNumber,
             x,
             y,
-          })
+          }
+          if (lobbyState.inLobby && lobbyState.gameId) {
+            removePayload.gameId = lobbyState.gameId
+          }
+          result = await removeShipAction(removePayload)
           setStatusMessage(`Navire retire depuis ${boardId} ${label}.`)
           return
         }
@@ -479,13 +491,17 @@ function App() {
           return { x, y: y - (shipLength - 1), orientation: 'VERTICAL' }
         }
         const normalizedPlacement = normalizePlacementForBackend()
-        result = await placeShipAction({
+        const placePayload = {
           player: localPlayerNumber,
           shipType: selectedShipType,
           x: normalizedPlacement.x,
           y: normalizedPlacement.y,
           orientation: normalizedPlacement.orientation,
-        })
+        }
+        if (lobbyState.inLobby && lobbyState.gameId) {
+          placePayload.gameId = lobbyState.gameId
+        }
+        result = await placeShipAction(placePayload)
         handlePlacementSuccess(localPlayerNumber, selectedShipType)
         if (result.state.phase === 'BATTLE') {
           const n = result.state.boards?.length ?? 0
@@ -587,10 +603,14 @@ function App() {
       return
     }
     try {
-      await removeShipAction({
+      const removePayload = {
         player: localPlayerNumber,
         shipType: selectedShipType,
-      })
+      }
+      if (lobbyState.inLobby && lobbyState.gameId) {
+        removePayload.gameId = lobbyState.gameId
+      }
+      await removeShipAction(removePayload)
       setStatusMessage(`Navire ${selectedShipLabel} retire.`)
     } catch {
       // L'erreur est geree dans le hook API.
@@ -605,6 +625,8 @@ function App() {
     localPlayerNumber,
     selectedShipType,
     selectedShipLabel,
+    lobbyState.inLobby,
+    lobbyState.gameId,
   ])
 
   useEffect(() => {
@@ -638,7 +660,9 @@ function App() {
     setStatusMessage("Tour de l'IA...")
     const timerId = window.setTimeout(async () => {
       try {
-        await runAiStepAction()
+        const lobbyGameId =
+          lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : undefined
+        await runAiStepAction(lobbyGameId)
       } catch {
         // L'erreur est geree dans le hook API.
       } finally {
@@ -649,7 +673,17 @@ function App() {
       window.clearTimeout(timerId)
       aiStepLockRef.current = false
     }
-  }, [screen, isDuelWithAi, gameState, loading, currentIsAi, gamePhase, runAiStepAction])
+  }, [
+    screen,
+    isDuelWithAi,
+    gameState,
+    loading,
+    currentIsAi,
+    gamePhase,
+    runAiStepAction,
+    lobbyState.inLobby,
+    lobbyState.gameId,
+  ])
 
   useEffect(() => {
     if (!gameState || gameState.phase !== 'BATTLE') {
@@ -679,6 +713,7 @@ function App() {
 
     const nextDisplayed = cloneCellsGrid(displayedCells)
     let hasImmediateChange = false
+    let newlyQueuedEnemyImpacts = 0
     for (let y = 0; y < nextCells.length; y += 1) {
       const nextRow = nextCells[y] ?? []
       const shownRow = nextDisplayed[y] ?? []
@@ -688,6 +723,7 @@ function App() {
         if (nextCell === shownCell) continue
         if (nextCell === 'MISS' || nextCell === 'HIT' || nextCell === 'SUNK') {
           pendingImpactRevealsRef.current.push({ x, y, value: nextCell })
+          newlyQueuedEnemyImpacts += 1
           continue
         }
         shownRow[x] = nextCell
@@ -699,7 +735,9 @@ function App() {
       displayedOwnBoardCellsRef.current = nextDisplayed
       setDelayedOwnBoardCells(nextDisplayed)
     }
-    scheduleNextImpactReveal()
+    if (newlyQueuedEnemyImpacts > 0 && !impactRevealInProgressRef.current) {
+      scheduleNextImpactReveal(0)
+    }
   }, [gameState, scheduleNextImpactReveal])
 
   useEffect(() => {
@@ -761,12 +799,24 @@ function App() {
   const handleStartLobbyGame = useCallback(async (setupPatch = {}) => {
     if (!lobbyState.isHost || !lobbyState.gameId) return
     try {
-      await handleStartGame({ keepLobby: true, startMode: 'new', setupPatch })
+      await handleStartGame({
+        keepLobby: true,
+        startMode: 'new',
+        setupPatch,
+        lobbyGameId: lobbyState.gameId,
+        bootstrapViewerPlayer: lobbyState.playerNumber,
+      })
       startGame(lobbyState.gameId)
     } catch {
       // L'erreur est deja geree dans handleStartGame.
     }
-  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, startGame])
+  }, [
+    handleStartGame,
+    lobbyState.isHost,
+    lobbyState.gameId,
+    lobbyState.playerNumber,
+    startGame,
+  ])
 
   // Example: show WebSocket status
   useEffect(() => {
@@ -804,7 +854,8 @@ function App() {
       if (lobbyState.isHost) {
         return
       }
-      refreshStateAction(lobbyState.playerNumber ?? 1)
+      const lobbyScope = wsMessage.gameId ?? lobbyState.gameId ?? null
+      refreshStateAction(lobbyState.playerNumber ?? 1, lobbyScope)
         .then((state) => enterGameScreenWithState(state, 'Partie lancee par l hote.'))
         .catch(() => setStatusMessage('Impossible de charger la partie demarree par l hote.'))
     } else if (wsMessage?.type === 'GAME_STATE_UPDATE') {
@@ -816,7 +867,7 @@ function App() {
       ) {
         return
       }
-      syncStateAction(lobbyState.playerNumber ?? 1).catch(() => {
+      syncStateAction(lobbyState.playerNumber ?? 1, wsMessage.gameId).catch(() => {
       })
     } else if (wsMessage?.type === 'ERROR') {
       setStatusMessage(`Erreur WebSocket: ${wsMessage.message}`)
@@ -837,6 +888,12 @@ function App() {
   const gameSummary = useMemo(() => {
     return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
   }, [setup])
+  const lobbyPartLabel = useMemo(() => {
+    if (!lobbyState?.inLobby || !lobbyState.gameId) return null
+    const id = lobbyState.gameId
+    const shortId = id.length > 14 ? `${id.slice(0, 8)}\u2026${id.slice(-4)}` : id
+    return `Salon ${shortId}`
+  }, [lobbyState?.inLobby, lobbyState?.gameId])
   const isPlayerInShootMode = gamePhase === 'BATTLE' && isLocalTurn && !currentIsAi && shootModeActive
   const shouldShowShootModePrompt = shouldOfferShootMode && !shootModeActive
   const shouldShowPlacementConfirmPrompt = gamePhase === 'PLACEMENT' && !localPlacementLocked && remainingShips.length === 0
@@ -921,13 +978,14 @@ function App() {
 
   useEffect(() => {
     if (screen !== 'game' || !lobbyState.inLobby) return
+    const lobbyScope = lobbyState.gameId ?? null
     const pollId = window.setInterval(() => {
-      syncStateAction(localPlayerNumber).catch(() => {
+      syncStateAction(localPlayerNumber, lobbyScope).catch(() => {
         // Evite de casser l'UI en cas de latence/requete ratee.
       })
-    }, 800)
+    }, LOBBY_SYNC_POLL_MS)
     return () => window.clearInterval(pollId)
-  }, [screen, lobbyState.inLobby, localPlayerNumber, syncStateAction])
+  }, [screen, lobbyState.inLobby, lobbyState.gameId, localPlayerNumber, syncStateAction])
 
   if (screen === 'menu') {
     return (
@@ -957,7 +1015,10 @@ function App() {
       />
       <div className="game-banner">
         <div className="game-banner__summary">
-          {gameSummary} · Vous etes joueur {localPlayerNumber} · Vue: {cameraDirectionLabel} · Votre grille: {clientOwnBoardId}
+          {gameSummary}
+          {' · '}
+          {lobbyPartLabel ? `${lobbyPartLabel} · ` : ''}
+          Vous: joueur {localPlayerNumber} ( grille {clientOwnBoardId}, vue {cameraDirectionLabel})
         </div>
         <button type="button" className="game-banner__button" onClick={handleBackToMenu}>
           Retour au menu
@@ -1112,7 +1173,7 @@ function App() {
               ? (removalModeEnabled
                 ? `Mode suppression: cliquez un bateau sur la grille ${expectedOwnBoardId}.`
                 : `Cliquez sur la grille ${expectedOwnBoardId} pour poser ${selectedShipLabel}.`)
-              : `Tous les navires du joueur ${currentPlayer} sont poses.`}
+              : `Tous vos navires (joueur ${localPlayerNumber}) sont places. Utilisez le bouton Valider la flotte.`}
           </div>
         </div>
       )}
