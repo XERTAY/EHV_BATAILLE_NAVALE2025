@@ -4,7 +4,8 @@
 // wsClient.send({ type: 'CREATE_GAME', maxPlayers: 4 });
 // wsClient.onMessage = (msg) => { ... };
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:5183/ws/game';
+const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/game`;
+const WS_URL = import.meta.env.VITE_WS_URL ?? defaultWsUrl;
 
 class WSClient {
   constructor() {

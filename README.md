@@ -91,7 +91,7 @@ mvn -pl app/backend -am spring-boot:run
 mvn -f app/backend/pom.xml spring-boot:run
 ```
 
-Le backend demarre en local sur `http://localhost:5183`.
+Le backend demarre en local sur `http://localhost:4784`.
 
 ### 2) Demarrer le frontend (Vite)
 
@@ -103,7 +103,7 @@ npm install
 npm run dev
 ```
 
-Le frontend demarre en local sur `http://localhost:5173`.
+Le frontend demarre en local sur `http://localhost:2462`.
 
 ### 3) Tests locaux
 - Garder les deux serveurs demarres (backend + frontend)
@@ -114,8 +114,8 @@ Le frontend demarre en local sur `http://localhost:5173`.
 
 ### Endpoint
 
-- URL: `ws://localhost:5183/ws/game`
-- Origine frontend autorisee: `http://localhost:5173`
+- URL: `ws://localhost:4784/ws/game`
+- Origine frontend autorisee: `http://localhost:2462`
 
 ### Principe
 
@@ -184,4 +184,72 @@ ou bien après compilation :
 ```
 javac -d .src/**/*.java
 ```
+
+## Déploiement VPS avec Docker
+
+### Pré-requis VPS (Debian déjà configuré)
+
+Cette section part du principe que :
+- Debian est déjà configuré sur le VPS
+- Docker est déjà installé et fonctionnel
+
+Vérifications minimales :
+
+```bash
+docker --version
+docker compose version
+```
+
+Si `docker compose` n'est pas disponible, installer le plugin compose :
+
+```bash
+sudo apt update
+sudo apt install -y docker-compose-plugin
+```
+
+### Préparation serveur
+
+- Ouvrir au minimum le port `2462` dans le firewall du VPS.
+- Si vous utilisez un nom de domaine, pointer le DNS vers l'IP du VPS.
+- Pour de la production Internet, prévoir ensuite HTTPS (port `443` + certificat TLS).
+
+### Déploiement initial
+
+```bash
+git clone <URL_DU_REPO> bataille-navale
+cd bataille-navale
+docker compose up -d --build
+```
+
+Le frontend est servi sur `http://IP_DU_VPS` (ou `http://votre-domaine`).
+
+### Commandes ON/OFF et exploitation
+
+- Démarrer (ON): `docker compose up -d --build`
+- Arrêter (OFF): `docker compose down`
+- Statut: `docker compose ps`
+- Logs en continu: `docker compose logs -f`
+- Redémarrer un service: `docker compose restart frontend` ou `docker compose restart backend`
+
+### Mise à jour applicative
+
+Depuis le dossier du projet sur le VPS :
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+### Dépannage rapide
+
+- Si l'application ne répond pas : `docker compose ps` puis `docker compose logs -f`.
+- Si le port `2462` est occupé, changer le mapping avec une variable:
+
+```bash
+FRONTEND_PORT=3000 docker compose up -d --build
+```
+
+- Si un conteneur redémarre en boucle, inspecter ses logs :
+  - `docker compose logs -f backend`
+  - `docker compose logs -f frontend`
 
