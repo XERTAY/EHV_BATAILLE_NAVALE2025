@@ -16,6 +16,16 @@ const BOARD_ID_TO_PLAYER = {
   C1: 3,
   D1: 4,
 }
+const FACE_OFF_CAMERA_DIRECTION_BY_PLAYER = {
+  1: 'NORTH',
+  2: 'SOUTH',
+}
+const STAR4_CAMERA_DIRECTION_BY_PLAYER = {
+  1: 'WEST',
+  2: 'EAST',
+  3: 'SOUTH',
+  4: 'NORTH',
+}
 
 const DEFAULT_SETUP = {
   startMode: 'new',
@@ -182,9 +192,11 @@ function App() {
   const {
     selectedShipType,
     selectedShipLabel,
+    selectedShipSize,
     setSelectedShipType,
     placementOrientation,
     setPlacementOrientation,
+    rotatePlacementOrientationClockwise,
     remainingShips,
     placementPreview,
     handlePlacementSuccess,
@@ -331,12 +343,26 @@ function App() {
           setStatusMessage(`Joueur ${currentPlayer}: tous vos navires sont deja poses.`)
           return
         }
+        const normalizePlacementForBackend = () => {
+          const shipLength = Math.max(1, Number(selectedShipSize) || 1)
+          if (placementOrientation === 'EAST') {
+            return { x, y, orientation: 'HORIZONTAL' }
+          }
+          if (placementOrientation === 'SOUTH') {
+            return { x, y, orientation: 'VERTICAL' }
+          }
+          if (placementOrientation === 'WEST') {
+            return { x: x - (shipLength - 1), y, orientation: 'HORIZONTAL' }
+          }
+          return { x, y: y - (shipLength - 1), orientation: 'VERTICAL' }
+        }
+        const normalizedPlacement = normalizePlacementForBackend()
         result = await placeShipAction({
           player: localPlayerNumber,
           shipType: selectedShipType,
-          x,
-          y,
-          orientation: placementOrientation,
+          x: normalizedPlacement.x,
+          y: normalizedPlacement.y,
+          orientation: normalizedPlacement.orientation,
         })
         handlePlacementSuccess(localPlayerNumber, selectedShipType)
         if (result.state.phase === 'BATTLE') {
@@ -386,10 +412,25 @@ function App() {
     selectedShipType,
     selectedShipLabel,
     placementOrientation,
+    selectedShipSize,
     handlePlacementSuccess,
     fireAtAction,
     currentIsAi,
   ])
+
+  useEffect(() => {
+    if (screen !== 'game' || gamePhase !== 'PLACEMENT') return
+    const onKeyDown = (event) => {
+      if (event.repeat) return
+      if (event.key?.toLowerCase() !== 'r') return
+      const targetTag = event.target?.tagName?.toLowerCase()
+      if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select') return
+      event.preventDefault()
+      rotatePlacementOrientationClockwise()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [screen, gamePhase, rotatePlacementOrientationClockwise])
 
   const onCellHover = useCallback((cellData) => {
     handleCellHover(cellData, expectedOwnBoardId)
@@ -526,6 +567,34 @@ function App() {
   const gameSummary = useMemo(() => {
     return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
   }, [setup])
+  const isPlayerInShootMode = gamePhase === 'BATTLE' && isLocalTurn && !currentIsAi
+  const cameraAnchorPlayer = useMemo(() => {
+    if (isPlayerInShootMode && numPlayersInState === 2) {
+      return localPlayerNumber === 1 ? 2 : 1
+    }
+    return localPlayerNumber
+  }, [isPlayerInShootMode, numPlayersInState, localPlayerNumber])
+  const cameraDirection = useMemo(() => {
+    if (layoutSet === 'star4') {
+      return STAR4_CAMERA_DIRECTION_BY_PLAYER[cameraAnchorPlayer] ?? 'NORTH'
+    }
+    return FACE_OFF_CAMERA_DIRECTION_BY_PLAYER[cameraAnchorPlayer] ?? 'SOUTH'
+  }, [layoutSet, cameraAnchorPlayer])
+  const cameraStateKey = useMemo(() => {
+    const gamePart = lobbyState.gameId ?? 'local'
+    return `${gamePart}:player:${localPlayerNumber}`
+  }, [lobbyState.gameId, localPlayerNumber])
+  const [cameraFacingDirection, setCameraFacingDirection] = useState(cameraDirection)
+  useEffect(() => {
+    setCameraFacingDirection(cameraDirection)
+  }, [cameraDirection, cameraStateKey])
+  const cameraDirectionLabel = useMemo(() => {
+    if (cameraFacingDirection === 'NORTH') return 'NORD'
+    if (cameraFacingDirection === 'SOUTH') return 'SUD'
+    if (cameraFacingDirection === 'EAST') return 'EST'
+    return 'OUEST'
+  }, [cameraFacingDirection])
+  const localPlacementCompleted = gamePhase === 'PLACEMENT' && remainingShips.length === 0
 
   useEffect(() => {
     if (screen !== 'game' || !lobbyState.inLobby) return
@@ -564,7 +633,7 @@ function App() {
       />
       <div className="game-banner">
         <div className="game-banner__summary">
-          {gameSummary} · Vous etes joueur {localPlayerNumber} · Votre grille: {clientOwnBoardId}
+          {gameSummary} · Vous etes joueur {localPlayerNumber} · Vue: {cameraDirectionLabel} · Votre grille: {clientOwnBoardId}
         </div>
         <button type="button" className="game-banner__button" onClick={handleBackToMenu}>
           Retour au menu
@@ -586,7 +655,18 @@ function App() {
           {turnOverlayLabel}
         </div>
       )}
-      {gamePhase === 'PLACEMENT' && (
+      <div className="compass-widget" aria-label={`Boussole, direction ${cameraDirectionLabel}`}>
+        <div className={`compass-widget__dir ${cameraFacingDirection === 'NORTH' ? 'active' : ''}`}>N</div>
+        <div className={`compass-widget__dir ${cameraFacingDirection === 'EAST' ? 'active' : ''}`}>E</div>
+        <div className={`compass-widget__dir ${cameraFacingDirection === 'SOUTH' ? 'active' : ''}`}>S</div>
+        <div className={`compass-widget__dir ${cameraFacingDirection === 'WEST' ? 'active' : ''}`}>W</div>
+      </div>
+      {localPlacementCompleted && (
+        <div className="placement-wait-banner">
+          En attente du ou des ennemis...
+        </div>
+      )}
+      {gamePhase === 'PLACEMENT' && !localPlacementCompleted && (
         <div className="placement-panel">
           <div className="placement-panel__title">{`Placement manuel - Joueur ${localPlayerNumber}`}</div>
           <div className="placement-panel__row">
@@ -607,15 +687,15 @@ function App() {
           <div className="placement-panel__row">
             <button
               type="button"
-              className={placementOrientation === 'HORIZONTAL' ? 'active' : ''}
-              onClick={() => setPlacementOrientation('HORIZONTAL')}
+              className={placementOrientation === 'EAST' || placementOrientation === 'WEST' ? 'active' : ''}
+              onClick={() => setPlacementOrientation('EAST')}
             >
               Horizontal
             </button>
             <button
               type="button"
-              className={placementOrientation === 'VERTICAL' ? 'active' : ''}
-              onClick={() => setPlacementOrientation('VERTICAL')}
+              className={placementOrientation === 'SOUTH' || placementOrientation === 'NORTH' ? 'active' : ''}
+              onClick={() => setPlacementOrientation('SOUTH')}
             >
               Vertical
             </button>
@@ -636,7 +716,11 @@ function App() {
         boards={boards}
         aiBoardIds={aiBoardIds}
         duelAiFocus={isDuelWithAi}
+        gamePhase={gamePhase}
+        topDownView={isPlayerInShootMode}
         ownBoardId={clientOwnBoardId}
+        cameraDirection={cameraDirection}
+        cameraStateKey={cameraStateKey}
         boardSize={boardSize}
         boardStatesById={boardStatesById}
         recentImpactsByBoard={recentImpactsByBoard}
@@ -646,6 +730,7 @@ function App() {
         showCoordinates={showCoordinates}
         waveMode={waveMode}
         benchmarkEnabled={benchmarkEnabled}
+        onCameraDirectionChange={setCameraFacingDirection}
         onCellHover={onCellHover}
         onCellClick={handleCellClick}
       />
