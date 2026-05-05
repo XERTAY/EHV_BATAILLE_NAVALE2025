@@ -142,6 +142,29 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         ));
     }
 
+    /**
+     * Notifie toutes les sessions WebSocket encore connectees dans la partie ({@code lobbyId}),
+     * afin que les autres clients recuperent vite l'etat via {@code GET /game/state}.
+     */
+    public void notifyLobbyGameSync(String lobbyId) {
+        if (lobbyId == null || lobbyId.isBlank()) {
+            return;
+        }
+        String id = lobbyId.strip();
+        GameSessionManager.GameSession session = sessionManager.getGame(id);
+        if (session == null) {
+            return;
+        }
+        try {
+            broadcastToGame(session, Map.of(
+                "type", "GAME_STATE_UPDATE",
+                "gameId", id
+            ));
+        } catch (Exception ignored) {
+            // Lobby vide ou sockets fermees : pas bloquant pour HTTP.
+        }
+    }
+
     private void broadcastToGame(GameSessionManager.GameSession game, Map<String, Object> payload) throws Exception {
         CharSequence serialized = Objects.requireNonNull(gson.toJson(payload));
         for (WebSocketSession playerSession : game.getPlayers()) {

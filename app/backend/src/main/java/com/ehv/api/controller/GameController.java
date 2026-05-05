@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ehv.api.config.GameWebSocketHandler;
 import com.ehv.api.dto.FireRequest;
 import com.ehv.api.dto.PlaceShipRequest;
 import com.ehv.api.dto.ConfirmPlacementRequest;
@@ -26,6 +27,15 @@ import com.ehv.api.view.GameStateResponse;
 @RequestMapping("/api")
 public class GameController {
     private final DuelGameService duelGameService = new DuelGameService();
+    private final GameWebSocketHandler gameWebSocketHandler;
+
+    public GameController(GameWebSocketHandler gameWebSocketHandler) {
+        this.gameWebSocketHandler = gameWebSocketHandler;
+    }
+
+    private static boolean hasLobbyGameId(String gameId) {
+        return gameId != null && !gameId.isBlank();
+    }
 
     @GetMapping("/health")
     public String health() {
@@ -63,7 +73,11 @@ public class GameController {
 
     @PostMapping("/game/placement/confirm")
     public ActionResponse confirmPlacement(@RequestBody ConfirmPlacementRequest request) {
-        return duelGameService.confirmPlacement(request);
+        ActionResponse response = duelGameService.confirmPlacement(request);
+        if (hasLobbyGameId(request.gameId())) {
+            gameWebSocketHandler.notifyLobbyGameSync(request.gameId());
+        }
+        return response;
     }
 
     @PostMapping("/game/auto-place")
@@ -73,7 +87,11 @@ public class GameController {
 
     @PostMapping("/game/fire")
     public ActionResponse fire(@RequestBody FireRequest request) {
-        return duelGameService.fireAt(request);
+        ActionResponse response = duelGameService.fireAt(request);
+        if (hasLobbyGameId(request.gameId())) {
+            gameWebSocketHandler.notifyLobbyGameSync(request.gameId());
+        }
+        return response;
     }
 
     @PostMapping("/game/ai-step")

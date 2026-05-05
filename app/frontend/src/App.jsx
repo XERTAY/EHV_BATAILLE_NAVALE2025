@@ -284,6 +284,9 @@ function App() {
   })
   const turnOverlayLabel = useMemo(() => {
     if (gamePhase === 'PLACEMENT') {
+      if (lobbyState?.inLobby && !isDuelWithAi) {
+        return 'Placez vos navires puis validez votre flotte.'
+      }
       if (isDuelWithAi && !currentIsAi && remainingShips.length === 0) {
         return "Placement de l'IA en cours..."
       }
@@ -303,7 +306,17 @@ function App() {
       return didLocalPlayerWin ? 'Victoire' : 'Défaite'
     }
     return currentIsAi ? "Tour de l'IA" : 'Votre tour'
-  }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, isGameOver, didLocalPlayerWin, currentPlayer, isLocalTurn])
+  }, [
+    lobbyState?.inLobby,
+    isDuelWithAi,
+    gamePhase,
+    currentIsAi,
+    remainingShips.length,
+    isGameOver,
+    didLocalPlayerWin,
+    currentPlayer,
+    isLocalTurn,
+  ])
   const placementLockedByPlayer = gameState?.placementLockedByPlayer ?? []
   const placedShipTypesByPlayer = gameState?.placedShipTypesByPlayer ?? []
   const localPlacementLocked = Boolean(placementLockedByPlayer[localPlayerNumber - 1])
@@ -488,12 +501,16 @@ function App() {
         }
       } else if (gamePhase === 'BATTLE') {
         const targetPlayer = BOARD_ID_TO_PLAYER[boardId]
-        result = await fireAtAction({
+        const firePayload = {
           player: localPlayerNumber,
           x,
           y,
           targetPlayer: numPlayersInState > 2 ? targetPlayer : undefined,
-        })
+        }
+        if (lobbyState.inLobby && lobbyState.gameId) {
+          firePayload.gameId = lobbyState.gameId
+        }
+        result = await fireAtAction(firePayload)
         const targetLabel = `${boardId} ${label}`
         if (result.state.phase === 'GAME_OVER') {
           setStatusMessage(`Joueur ${result.state.winner} gagne. Dernier tir ${targetLabel}: ${result.result}.`)
@@ -528,6 +545,8 @@ function App() {
     handlePlacementSuccess,
     fireAtAction,
     currentIsAi,
+    lobbyState.inLobby,
+    lobbyState.gameId,
   ])
 
   const handleConfirmPlacement = useCallback(async () => {
@@ -538,7 +557,11 @@ function App() {
       return
     }
     try {
-      await confirmPlacementAction({ player: localPlayerNumber })
+      const payload = { player: localPlayerNumber }
+      if (lobbyState.inLobby && lobbyState.gameId) {
+        payload.gameId = lobbyState.gameId
+      }
+      await confirmPlacementAction(payload)
       setStatusMessage('Placement valide. En attente des autres joueurs...')
       setRemovalModeEnabled(false)
     } catch {
@@ -553,6 +576,8 @@ function App() {
     confirmPlacementAction,
     localPlayerNumber,
     setRemovalModeEnabled,
+    lobbyState.inLobby,
+    lobbyState.gameId,
   ])
 
   const handleRemoveSelectedShip = useCallback(async () => {
@@ -782,10 +807,32 @@ function App() {
       refreshStateAction(lobbyState.playerNumber ?? 1)
         .then((state) => enterGameScreenWithState(state, 'Partie lancee par l hote.'))
         .catch(() => setStatusMessage('Impossible de charger la partie demarree par l hote.'))
+    } else if (wsMessage?.type === 'GAME_STATE_UPDATE') {
+      if (
+        screen !== 'game'
+        || !lobbyState.inLobby
+        || !wsMessage.gameId
+        || wsMessage.gameId !== lobbyState.gameId
+      ) {
+        return
+      }
+      syncStateAction(lobbyState.playerNumber ?? 1).catch(() => {
+      })
     } else if (wsMessage?.type === 'ERROR') {
       setStatusMessage(`Erreur WebSocket: ${wsMessage.message}`)
     }
-  }, [wsMessage, setup.playerCount, lobbyState.isHost, lobbyState.playerNumber, refreshStateAction, enterGameScreenWithState])
+  }, [
+    wsMessage,
+    setup.playerCount,
+    screen,
+    lobbyState.isHost,
+    lobbyState.inLobby,
+    lobbyState.gameId,
+    lobbyState.playerNumber,
+    refreshStateAction,
+    enterGameScreenWithState,
+    syncStateAction,
+  ])
 
   const gameSummary = useMemo(() => {
     return `${setup.boardSize}x${setup.boardSize} · ${setup.playerCount} joueurs · ${setup.humanPlayers} humains${setup.withAI ? ` · ${setup.playerCount - setup.humanPlayers} IA` : ''} · ${setup.fleetShipSizes.length} navires`
