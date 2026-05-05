@@ -9,6 +9,7 @@ const EMPTY_PLACED_BY_PLAYER = () => ({
   3: [],
   4: [],
 })
+const ORIENTATION_SEQUENCE = ['EAST', 'SOUTH', 'WEST', 'NORTH']
 
 /**
  * Flotte alignée sur le backend (`DuelGameService`) : types `SHIP_0`, `SHIP_1`, …
@@ -32,7 +33,7 @@ export default function usePlacement({
   }, [fleetShipSizes])
 
   const [selectedShipType, setSelectedShipType] = useState('SHIP_0')
-  const [placementOrientation, setPlacementOrientation] = useState('HORIZONTAL')
+  const [placementOrientation, setPlacementOrientation] = useState('EAST')
   const [hoveredPlacementCell, setHoveredPlacementCell] = useState(null)
   const [placedShipsByPlayer, setPlacedShipsByPlayer] = useState(() => EMPTY_PLACED_BY_PLAYER())
 
@@ -56,13 +57,21 @@ export default function usePlacement({
     const ship = fleet.find((s) => s.type === effectiveSelectedShipType)
     return ship?.label ?? effectiveSelectedShipType
   }, [fleet, effectiveSelectedShipType])
+  const selectedShipSize = selectedShip?.size ?? 1
 
   const placementPreview = useMemo(() => {
     if (!hoveredPlacementCell || !selectedShip || gamePhase !== 'PLACEMENT') return []
+    const directionByOrientation = {
+      EAST: { dx: 1, dy: 0 },
+      SOUTH: { dx: 0, dy: 1 },
+      WEST: { dx: -1, dy: 0 },
+      NORTH: { dx: 0, dy: -1 },
+    }
+    const direction = directionByOrientation[placementOrientation] ?? directionByOrientation.EAST
     const cells = []
     for (let index = 0; index < selectedShip.size; index += 1) {
-      const x = placementOrientation === 'HORIZONTAL' ? hoveredPlacementCell.x + index : hoveredPlacementCell.x
-      const y = placementOrientation === 'VERTICAL' ? hoveredPlacementCell.y + index : hoveredPlacementCell.y
+      const x = hoveredPlacementCell.x + direction.dx * index
+      const y = hoveredPlacementCell.y + direction.dy * index
       if (x >= 0 && x < boardSize && y >= 0 && y < boardSize) {
         cells.push({ x, y })
       }
@@ -82,8 +91,16 @@ export default function usePlacement({
     setPlacedShipsByPlayer(EMPTY_PLACED_BY_PLAYER())
     setHoveredPlacementCell(null)
     setSelectedShipType(fleet[0]?.type ?? 'SHIP_0')
-    setPlacementOrientation('HORIZONTAL')
+    setPlacementOrientation('EAST')
   }, [fleet])
+
+  const rotatePlacementOrientationClockwise = useCallback(() => {
+    setPlacementOrientation((current) => {
+      const index = ORIENTATION_SEQUENCE.indexOf(current)
+      if (index < 0) return ORIENTATION_SEQUENCE[0]
+      return ORIENTATION_SEQUENCE[(index + 1) % ORIENTATION_SEQUENCE.length]
+    })
+  }, [])
 
   const handleCellHover = useCallback((cellData, expectedOwnBoardId) => {
     if (!cellData) {
@@ -101,9 +118,11 @@ export default function usePlacement({
   return {
     selectedShipType: effectiveSelectedShipType,
     selectedShipLabel,
+    selectedShipSize,
     setSelectedShipType,
     placementOrientation,
     setPlacementOrientation,
+    rotatePlacementOrientationClockwise,
     remainingShips,
     placementPreview,
     handlePlacementSuccess,

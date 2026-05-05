@@ -212,6 +212,74 @@
   opacity: 0.9;
 }
 
+.placement-wait-banner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  border: 1px solid rgba(127, 228, 243, 0.9);
+  background: rgba(4, 18, 29, 0.9);
+  color: #ecfdff;
+  padding: 14px 22px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.compass-widget {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 12;
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  border: 1px solid rgba(127, 228, 243, 0.72);
+  background: rgba(4, 18, 29, 0.76);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.compass-widget__dir {
+  position: absolute;
+  color: rgba(219, 251, 255, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  transform: translate(-50%, -50%);
+}
+
+.compass-widget__dir.active {
+  color: #f4ffff;
+  text-shadow:
+    0 0 8px rgba(141, 246, 255, 0.9),
+    0 0 16px rgba(141, 246, 255, 0.45);
+}
+
+.compass-widget__dir:nth-child(1) {
+  top: 18%;
+  left: 50%;
+}
+
+.compass-widget__dir:nth-child(2) {
+  top: 50%;
+  left: 82%;
+}
+
+.compass-widget__dir:nth-child(3) {
+  top: 82%;
+  left: 50%;
+}
+
+.compass-widget__dir:nth-child(4) {
+  top: 50%;
+  left: 18%;
+}
+
 .menu-screen {
   position: relative;
   width: 100%;
@@ -617,6 +685,8 @@
   .shot-feedback,
   .shot-feedback--error,
   .turn-banner,
+  .compass-widget,
+  .placement-wait-banner,
   .placement-panel,
   .layout-controls,
   .game-banner,
