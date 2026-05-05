@@ -721,7 +721,7 @@ function App() {
   }, [gameState, delayedOwnBoardCells, clientOwnBoardId])
 
   // --- WebSocket integration ---
-  const { wsState, wsMessage, createGame, joinGame, startGame } = useWebSocketGame()
+  const { wsState, wsMessage, ensureConnected, createGame, joinGame, startGame } = useWebSocketGame()
 
   const handleCreateLobby = useCallback((maxPlayers) => {
     createGame(maxPlayers)
@@ -895,6 +895,7 @@ function App() {
         onRefreshSaves={refreshSaves}
         loading={loading}
         wsConnected={wsState.connected}
+        ensureWs={ensureConnected}
         lobby={lobbyState}
         statusMessage={statusMessage}
       />
