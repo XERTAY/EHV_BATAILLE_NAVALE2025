@@ -7,5 +7,7 @@ public record ResetGameRequest(
     List<Integer> fleetShipSizes,
     Integer playerCount,
     Boolean withAI,
-    Integer humanPlayers
+    Integer humanPlayers,
+    /** Id de salon WebSocket : partie isolée côté serveur. Absent ou vide = jeu local partagé. */
+    String gameId
 ) {}

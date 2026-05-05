@@ -24,12 +24,14 @@ export default function useGameApi() {
       playerCount = 2,
       withAI = false,
       humanPlayers = 2,
+      lobbyGameId = null,
+      viewerPlayer = 1,
     ) => {
       try {
         setLoading(true)
         setErrorMessage('')
-        await resetGame(boardSize, fleetShipSizes, playerCount, withAI, humanPlayers)
-        const state = await getGameState(1)
+        await resetGame(boardSize, fleetShipSizes, playerCount, withAI, humanPlayers, lobbyGameId)
+        const state = await getGameState(Math.max(1, Number(viewerPlayer) || 1), lobbyGameId)
         setGameState(state)
         return state
       } catch (error) {
@@ -128,11 +130,11 @@ export default function useGameApi() {
     }
   }, [])
 
-  const refreshStateAction = useCallback(async (player = 1) => {
+  const refreshStateAction = useCallback(async (player = 1, lobbyGameId = null) => {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await getGameState(player)
+      const state = await getGameState(player, lobbyGameId)
       setGameState(state)
       return state
     } catch (error) {
@@ -143,11 +145,11 @@ export default function useGameApi() {
     }
   }, [])
 
-  const runAiStepAction = useCallback(async () => {
+  const runAiStepAction = useCallback(async (lobbyGameId) => {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await runAiStep()
+      const state = await runAiStep(lobbyGameId)
       setGameState(state)
       return state
     } catch (error) {
@@ -158,8 +160,8 @@ export default function useGameApi() {
     }
   }, [])
 
-  const syncStateAction = useCallback(async (player = 1) => {
-    const state = await getGameState(player)
+  const syncStateAction = useCallback(async (player = 1, lobbyGameId = null) => {
+    const state = await getGameState(player, lobbyGameId)
     setGameState(state)
     return state
   }, [])
