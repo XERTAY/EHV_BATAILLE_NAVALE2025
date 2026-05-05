@@ -9,7 +9,7 @@ public class BackendConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-            .allowedOrigins("http://localhost:5173")
+            .allowedOriginPatterns("*")
             .allowedMethods("GET", "POST", "OPTIONS");
     }
 }
