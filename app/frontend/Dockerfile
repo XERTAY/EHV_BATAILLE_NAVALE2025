@@ -2,7 +2,7 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY app/frontend/package*.json ./
-RUN npm ci
+RUN npm install --no-audit --no-fund
 
 COPY app/frontend/ ./
 RUN npm run build
