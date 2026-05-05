@@ -1,17 +1,17 @@
 package com.ehv.battleship.view;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.Scanner;
+
 import com.ehv.battleship.legacy.controller.GameController;
-import com.ehv.battleship.model.GamePersistence;
-import com.ehv.battleship.model.Game;
-import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.AI;
 import com.ehv.battleship.model.Coordinate;
+import com.ehv.battleship.model.Game;
+import com.ehv.battleship.model.GamePersistence;
+import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.ShotResult;
-
-import java.util.List;
-import java.util.Scanner;
-import java.util.ArrayList;
-import java.util.Random;
 
 public class ConsoleMain {
 
@@ -38,9 +38,9 @@ public class ConsoleMain {
                 System.out.println("Aucune sauvegarde disponible dans saves/. Veuillez en créer une ou entrer un chemin personnalisé.");
             }
             while (true) {
-                System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
+                System.out.print("Chemin de sauvegarde (Entrée pour défaut bataille-navale.save) : ");
                 String input = scanner.nextLine().trim();
-                String savePath = input.isEmpty() ? "saves/bataille-navale.save" : input;
+                String savePath = input.isEmpty() ? "bataille-navale.save" : input;
 
                 try {
                     game = GamePersistence.load(savePath);
@@ -87,6 +87,7 @@ public class ConsoleMain {
                       System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
                       System.out.println("\nGrille de " + currentPlayer.getName() + " après le placement :");
                       System.out.println(renderer.renderPlayerGrid(currentPlayer.getGrid()));
+                                            placementController.endTurn();
                   } else {
                       placeFleetManually(scanner, renderer, placementController, currentPlayer, fleetShipSizes);
                   }
@@ -259,9 +260,9 @@ public class ConsoleMain {
     /** Demande le chemin et charge la partie via le contrôleur (persistance hors vue). */
     private static Game askLoadGame(Scanner scanner) {
         while (true) {
-            System.out.print("Chemin de sauvegarde (Entrée pour défaut saves/bataille-navale.save) : ");
+            System.out.print("Chemin de sauvegarde (Entrée pour défaut bataille-navale.save) : ");
             String input = scanner.nextLine().trim();
-            String savePath = input.isEmpty() ? "saves/bataille-navale.save" : input;
+            String savePath = input.isEmpty() ? "bataille-navale.save" : input;
             try {
                 Game game = GameController.loadGame(savePath);
                 System.out.println("Partie chargée depuis : " + savePath);
