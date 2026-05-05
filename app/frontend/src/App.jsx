@@ -153,6 +153,8 @@ function App() {
     [gameState, currentPlayer],
   )
   const gamePhase = gameState?.phase
+  const isGameOver = gamePhase === 'GAME_OVER'
+  const didLocalPlayerWin = isGameOver && gameState?.winner === localPlayerNumber
   const boardSize = gameState?.boardSize ?? setup.boardSize ?? 10
   const boardStatesById = useMemo(() => {
     const stateById = {}
@@ -225,11 +227,11 @@ function App() {
       if (currentIsAi) return `Tour de l'IA ${currentPlayer}`
       return isLocalTurn ? 'Votre tour - tir' : `Tour du joueur ${currentPlayer}`
     }
-    if (gamePhase === 'GAME_OVER') {
-      return gameState?.winner === 1 ? 'Victoire' : 'Defaite'
+    if (isGameOver) {
+      return didLocalPlayerWin ? 'Victoire' : 'Défaite'
     }
     return currentIsAi ? "Tour de l'IA" : 'Votre tour'
-  }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, gameState?.winner, currentPlayer, isLocalTurn])
+  }, [isDuelWithAi, gamePhase, currentIsAi, remainingShips.length, isGameOver, didLocalPlayerWin, currentPlayer, isLocalTurn])
 
   const interactiveBoards = useMemo(() => {
     if (!gameState) return {}
@@ -261,12 +263,25 @@ function App() {
     setSetup((current) => normalizeSetup({ ...current, ...patch }))
   }, [])
 
-  const handleStartGame = useCallback(async () => {
-    const effectiveSetup = normalizeSetup(setup)
+  const handleStartGame = useCallback(async (options = {}) => {
+    const keepLobby = Boolean(options.keepLobby)
+    const startMode = options.startMode === 'load' ? 'load' : 'new'
+    const setupPatch = options.setupPatch ?? {}
+    const effectiveSetup = normalizeSetup({ ...setup, ...setupPatch, startMode })
     const nextLayoutSet = effectiveSetup.playerCount === 4 ? 'star4' : 'faceoff'
 
     try {
       setStatusMessage('Demarrage de la partie...')
+      if (!keepLobby) {
+        setLobbyState({
+          inLobby: false,
+          isHost: false,
+          gameId: null,
+          players: 0,
+          maxPlayers: 0,
+          playerNumber: 1,
+        })
+      }
       if (effectiveSetup.startMode === 'load') {
         const loaded = await loadGameAction(effectiveSetup.loadSaveFile)
         setLayoutSet(loaded?.boards?.length === 4 ? 'star4' : 'faceoff')
@@ -510,10 +525,10 @@ function App() {
     joinGame(trimmed)
   }, [joinGame])
 
-  const handleStartLobbyGame = useCallback(async () => {
+  const handleStartLobbyGame = useCallback(async (setupPatch = {}) => {
     if (!lobbyState.isHost || !lobbyState.gameId) return
     try {
-      await handleStartGame()
+      await handleStartGame({ keepLobby: true, startMode: 'new', setupPatch })
       startGame(lobbyState.gameId)
     } catch {
       // L'erreur est deja geree dans handleStartGame.
@@ -651,7 +666,7 @@ function App() {
         </button>
       </div>
       {turnOverlayLabel && (
-        <div className="turn-banner">
+        <div className={`turn-banner ${isGameOver ? 'turn-banner--result' : ''} ${didLocalPlayerWin ? 'turn-banner--victory' : ''} ${isGameOver && !didLocalPlayerWin ? 'turn-banner--defeat' : ''}`}>
           {turnOverlayLabel}
         </div>
       )}
