@@ -213,6 +213,28 @@ sudo apt install -y docker-compose-plugin
 - Si vous utilisez un nom de domaine, pointer le DNS vers l'IP du VPS.
 - Pour de la production Internet, prévoir ensuite HTTPS (port `443` + certificat TLS).
 
+#### Ouvrir les ports sur un VPS Debian
+
+Si `ufw` est installé :
+
+```bash
+sudo ufw allow 2462/tcp
+sudo ufw allow 443/tcp
+sudo ufw status
+```
+
+Si `ufw` n'est pas installé (installation rapide) :
+
+```bash
+sudo apt update
+sudo apt install -y ufw
+sudo ufw allow OpenSSH
+sudo ufw allow 2462/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+sudo ufw status
+```
+
 ### Déploiement initial
 
 ```bash
@@ -252,4 +274,24 @@ FRONTEND_PORT=3000 docker compose up -d --build
 - Si un conteneur redémarre en boucle, inspecter ses logs :
   - `docker compose logs -f backend`
   - `docker compose logs -f frontend`
+
+### URL à utiliser dans le navigateur
+
+Depuis le web, l'URL d'accès est :
+
+```text
+http://IP_PUBLIQUE_DU_VPS:2462
+```
+
+Exemple :
+
+```text
+http://203.0.113.10:2462
+```
+
+Pour récupérer l'IP publique directement sur le VPS :
+
+```bash
+curl ifconfig.me
+```
 
