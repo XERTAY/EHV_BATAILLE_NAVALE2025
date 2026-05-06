@@ -187,6 +187,23 @@
   min-width: 170px;
 }
 
+.opponent-presence-panel {
+  position: absolute;
+  top: 138px;
+  right: 14px;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 146, 146, 0.75);
+  background: rgba(41, 8, 8, 0.82);
+  color: #ffe8e8;
+  min-width: 220px;
+  font-size: 13px;
+}
+
 .placement-panel {
   position: absolute;
   top: 138px;

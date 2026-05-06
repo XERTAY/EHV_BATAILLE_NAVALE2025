@@ -1,11 +1,15 @@
 package com.ehv.api.config;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -15,14 +19,26 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.ehv.api.service.DuelGameService;
+import com.ehv.api.service.LobbyGameRegistry;
+import com.ehv.api.view.GameStateResponse;
+import com.ehv.api.view.DuelPhase;
+import com.ehv.api.security.LobbyJwtService;
 
 @Component
 public class GameWebSocketHandler extends TextWebSocketHandler {
     private final GameSessionManager sessionManager;
+    private final LobbyGameRegistry lobbyGameRegistry;
+    private final LobbyJwtService lobbyJwtService;
     private final Gson gson = new Gson();
 
-    public GameWebSocketHandler(GameSessionManager sessionManager) {
+    public GameWebSocketHandler(
+            GameSessionManager sessionManager,
+            LobbyGameRegistry lobbyGameRegistry,
+            LobbyJwtService lobbyJwtService) {
         this.sessionManager = sessionManager;
+        this.lobbyGameRegistry = lobbyGameRegistry;
+        this.lobbyJwtService = lobbyJwtService;
     }
 
     @Override
@@ -53,6 +69,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             case "CREATE_GAME" -> handleCreateGame(session, msg);
             case "JOIN_GAME" -> handleJoinGame(session, msg);
             case "START_GAME" -> handleStartGame(session, msg);
+            case "HEARTBEAT" -> handleHeartbeat(session, msg);
+            case "UPDATE_LOBBY_CONFIG" -> handleUpdateLobbyConfig(session, msg);
+            case "LEAVE_GAME" -> handleLeaveGame(session, msg);
             default -> {
                 send(session, Map.of(
                     "type", "ERROR",
@@ -72,15 +91,16 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         int maxPlayers = Math.min(4, Math.max(2, requested));
 
         GameSessionManager.GameSession game = sessionManager.createGame(maxPlayers, session);
-        sessionManager.joinGame(game.getGameId(), session);
-
+        int playerNumber = 1;
         send(session, Map.of(
             "type", "GAME_CREATED",
             "gameId", game.getGameId(),
             "players", game.getPlayerCount(),
             "maxPlayers", game.getMaxPlayers(),
-            "playerNumber", game.getPlayerNumber(session)
+            "playerNumber", playerNumber,
+            "resumeToken", lobbyJwtService.issueToken(game.getGameId(), playerNumber)
         ));
+        sendLobbyConfigSnapshot(session, game.getGameId());
     }
 
     private void handleJoinGame(WebSocketSession session, JsonObject msg) throws Exception {
@@ -90,20 +110,84 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        GameSessionManager.GameSession game = sessionManager.joinGame(gameId, session);
-        if (game == null) {
-            send(session, Map.of("type", "ERROR", "message", "Unable to join game."));
+        String normalizedGameId = gameId.strip().toLowerCase();
+        String resumeToken = msg.has("resumeToken") ? msg.get("resumeToken").getAsString() : null;
+        Integer preferredPlayerNumber = null;
+        if (resumeToken != null && !resumeToken.isBlank()) {
+            preferredPlayerNumber = lobbyJwtService.resolvePlayerIfValid(resumeToken, normalizedGameId);
+            if (preferredPlayerNumber == null) {
+                send(session, Map.of("type", "ERROR", "message", "Unable to join game: invalid or expired resume token."));
+                return;
+            }
+        }
+        GameSessionManager.GameSession existing = sessionManager.getGame(normalizedGameId);
+        if (existing == null) {
+            send(session, Map.of("type", "ERROR", "message", "Unable to join game: game not found."));
+            return;
+        }
+        if (preferredPlayerNumber == null && existing.getPlayerCount() >= existing.getMaxPlayers()) {
+            send(session, Map.of("type", "ERROR", "message", "Unable to join game: game is full."));
             return;
         }
 
-        Map<String, Object> joinedPayload = Map.of(
-            "type", "JOINED_GAME",
-            "gameId", game.getGameId(),
-            "players", game.getPlayerCount(),
-            "maxPlayers", game.getMaxPlayers(),
-            "playerNumber", game.getPlayerNumber(session)
-        );
+        GameSessionManager.JoinResult joinResult = sessionManager.joinGame(normalizedGameId, session, preferredPlayerNumber);
+        if (joinResult == null) {
+            GameSessionManager.GameSession refreshed = sessionManager.getGame(normalizedGameId);
+            if (refreshed == null) {
+                send(session, Map.of("type", "ERROR", "message", "Unable to join game: game not found."));
+                return;
+            }
+            if (preferredPlayerNumber == null && refreshed.getPlayerCount() >= refreshed.getMaxPlayers()) {
+                send(session, Map.of("type", "ERROR", "message", "Unable to join game: game is full."));
+                return;
+            }
+            send(session, Map.of("type", "ERROR", "message", "Unable to join game: slot unavailable."));
+            return;
+        }
+        GameSessionManager.GameSession game = joinResult.game();
+        int playerNumber = joinResult.playerNumber();
+
+        Map<String, Object> joinedPayload = new HashMap<>();
+        joinedPayload.put("type", "JOINED_GAME");
+        joinedPayload.put("gameId", game.getGameId());
+        joinedPayload.put("players", game.getPlayerCount());
+        joinedPayload.put("maxPlayers", game.getMaxPlayers());
+        joinedPayload.put("playerNumber", playerNumber);
+        joinedPayload.put("resumeToken", lobbyJwtService.issueToken(game.getGameId(), playerNumber));
+        joinedPayload.put("resumed", joinResult.resumedSession());
+
+        String gameStatus = "NOT_STARTED";
+        String playerResult = "PENDING";
+        DuelGameService lobbyGame = lobbyGameRegistry.getLobbyIfPresent(game.getGameId());
+        if (lobbyGame != null) {
+            try {
+                GameStateResponse state = lobbyGame.getStateForPlayer(playerNumber);
+                joinedPayload.put("gamePhase", state.phase().name());
+                joinedPayload.put("winner", state.winner());
+                if (state.phase() == DuelPhase.GAME_OVER) {
+                    gameStatus = "FINISHED";
+                    if (state.winner() != null) {
+                        playerResult = state.winner() == playerNumber ? "VICTORY" : "DEFEAT";
+                    }
+                } else {
+                    gameStatus = "IN_PROGRESS";
+                }
+            } catch (Exception ignored) {
+                // Etat lobby indisponible: on conserve NOT_STARTED.
+            }
+        }
+        joinedPayload.put("gameStatus", gameStatus);
+        joinedPayload.put("playerResult", playerResult);
         send(session, joinedPayload);
+        sendLobbyConfigSnapshot(session, game.getGameId());
+
+        if (joinResult.resumedSession()) {
+            broadcastToGame(game, Map.of(
+                "type", "PLAYER_RECONNECTED",
+                "gameId", game.getGameId(),
+                "playerNumber", playerNumber
+            ));
+        }
 
         broadcastToGame(game, Map.of(
             "type", "PLAYER_COUNT_UPDATED",
@@ -111,6 +195,53 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             "players", game.getPlayerCount(),
             "maxPlayers", game.getMaxPlayers()
         ));
+    }
+
+    private void handleHeartbeat(WebSocketSession session, JsonObject msg) {
+        sessionManager.recordHeartbeat(session);
+    }
+
+    private void handleUpdateLobbyConfig(WebSocketSession session, JsonObject msg) throws Exception {
+        String gameId = sessionManager.getGameIdForSession(session);
+        if (gameId == null) {
+            send(session, Map.of("type", "ERROR", "message", "Unable to update lobby config: not in lobby."));
+            return;
+        }
+        GameSessionManager.GameSession game = sessionManager.getGame(gameId);
+        if (game == null) {
+            send(session, Map.of("type", "ERROR", "message", "Unable to update lobby config: game not found."));
+            return;
+        }
+        if (!game.isHost(session)) {
+            send(session, Map.of("type", "ERROR", "message", "Only host can update lobby config."));
+            return;
+        }
+        GameSessionManager.LobbyConfigSnapshot snapshot = parseLobbyConfig(msg);
+        sessionManager.updateLobbyConfigSnapshot(gameId, snapshot);
+        broadcastLobbyConfigSnapshot(game, snapshot, gameId);
+    }
+
+    private void handleLeaveGame(WebSocketSession session, JsonObject msg) throws Exception {
+        GameSessionManager.LeaveResult leaveResult = sessionManager.leaveGame(session);
+        if (leaveResult == null) {
+            send(session, Map.of("type", "LEFT_GAME", "ok", false));
+            return;
+        }
+        send(session, Map.of(
+            "type", "LEFT_GAME",
+            "ok", true,
+            "gameId", leaveResult.gameId(),
+            "playerNumber", leaveResult.playerNumber()
+        ));
+        GameSessionManager.GameSession game = sessionManager.getGame(leaveResult.gameId());
+        if (game != null) {
+            broadcastToGame(game, Map.of(
+                "type", "PLAYER_COUNT_UPDATED",
+                "gameId", game.getGameId(),
+                "players", game.getPlayerCount(),
+                "maxPlayers", game.getMaxPlayers()
+            ));
+        }
     }
 
     private void handleStartGame(WebSocketSession session, JsonObject msg) throws Exception {
@@ -165,6 +296,54 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    @Scheduled(fixedDelay = 1000L)
+    public void processPresenceEvents() {
+        List<GameSessionManager.PresenceEvent> events = sessionManager.collectPresenceEvents();
+        for (GameSessionManager.PresenceEvent event : events) {
+            GameSessionManager.GameSession game = sessionManager.getGame(event.gameId());
+            if (game == null) {
+                continue;
+            }
+            try {
+                if ("PLAYER_DISCONNECTED".equals(event.type())) {
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("type", "PLAYER_DISCONNECTED");
+                    payload.put("gameId", event.gameId());
+                    payload.put("playerNumber", event.playerNumber());
+                    payload.put("forfeitDeadlineAt", event.forfeitDeadlineAtMs() != null ? Instant.ofEpochMilli(event.forfeitDeadlineAtMs()).toString() : null);
+                    broadcastToGame(game, payload);
+                    continue;
+                }
+                if ("PLAYER_RECONNECTED".equals(event.type())) {
+                    broadcastToGame(game, Map.of(
+                        "type", "PLAYER_RECONNECTED",
+                        "gameId", event.gameId(),
+                        "playerNumber", event.playerNumber()
+                    ));
+                    continue;
+                }
+                if ("PLAYER_FORFEITED".equals(event.type())) {
+                    GameStateResponse state = lobbyGameRegistry.forLobbyOrLocal(event.gameId()).forfeitPlayer(event.playerNumber());
+                    broadcastToGame(game, Map.of(
+                        "type", "PLAYER_FORFEITED",
+                        "gameId", event.gameId(),
+                        "playerNumber", event.playerNumber(),
+                        "winner", state.winner()
+                    ));
+                    notifyLobbyGameSync(event.gameId());
+                }
+            } catch (Exception ignored) {
+                // Non bloquant: le polling HTTP prendra le relais.
+            }
+        }
+
+        List<String> idleLobbyIds = sessionManager.collectIdleLobbyIds();
+        for (String gameId : idleLobbyIds) {
+            sessionManager.evictLobby(gameId);
+            lobbyGameRegistry.removeLobby(gameId);
+        }
+    }
+
     private void broadcastToGame(GameSessionManager.GameSession game, Map<String, Object> payload) throws Exception {
         CharSequence serialized = Objects.requireNonNull(gson.toJson(payload));
         for (WebSocketSession playerSession : game.getPlayers()) {
@@ -181,6 +360,56 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                 }
             }
         }
+    }
+
+    private GameSessionManager.LobbyConfigSnapshot parseLobbyConfig(JsonObject msg) {
+        int boardSize = msg.has("boardSize") ? msg.get("boardSize").getAsInt() : 10;
+        int playerCount = msg.has("playerCount") ? msg.get("playerCount").getAsInt() : 2;
+        int humanPlayers = msg.has("humanPlayers") ? msg.get("humanPlayers").getAsInt() : playerCount;
+        int aiPlayers = msg.has("aiPlayers") ? msg.get("aiPlayers").getAsInt() : Math.max(0, playerCount - humanPlayers);
+        int fleetShipCount = msg.has("fleetShipCount") ? msg.get("fleetShipCount").getAsInt() : 5;
+        int fleetTotalCells = msg.has("fleetTotalCells") ? msg.get("fleetTotalCells").getAsInt() : 17;
+        return new GameSessionManager.LobbyConfigSnapshot(
+            boardSize,
+            playerCount,
+            humanPlayers,
+            aiPlayers,
+            fleetShipCount,
+            fleetTotalCells
+        ).normalized();
+    }
+
+    private void sendLobbyConfigSnapshot(WebSocketSession session, String gameId) throws Exception {
+        GameSessionManager.LobbyConfigSnapshot snapshot = sessionManager.getLobbyConfigSnapshot(gameId);
+        if (snapshot == null) {
+            return;
+        }
+        send(session, Map.of(
+            "type", "LOBBY_CONFIG_UPDATED",
+            "gameId", gameId,
+            "boardSize", snapshot.boardSize(),
+            "playerCount", snapshot.playerCount(),
+            "humanPlayers", snapshot.humanPlayers(),
+            "aiPlayers", snapshot.aiPlayers(),
+            "fleetShipCount", snapshot.fleetShipCount(),
+            "fleetTotalCells", snapshot.fleetTotalCells()
+        ));
+    }
+
+    private void broadcastLobbyConfigSnapshot(
+            GameSessionManager.GameSession game,
+            GameSessionManager.LobbyConfigSnapshot snapshot,
+            String gameId) throws Exception {
+        broadcastToGame(game, Map.of(
+            "type", "LOBBY_CONFIG_UPDATED",
+            "gameId", gameId,
+            "boardSize", snapshot.boardSize(),
+            "playerCount", snapshot.playerCount(),
+            "humanPlayers", snapshot.humanPlayers(),
+            "aiPlayers", snapshot.aiPlayers(),
+            "fleetShipCount", snapshot.fleetShipCount(),
+            "fleetTotalCells", snapshot.fleetTotalCells()
+        ));
     }
 
     private void send(WebSocketSession session, Map<String, Object> payload) throws Exception {

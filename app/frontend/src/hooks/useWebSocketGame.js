@@ -1,19 +1,33 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getLobbyResumeToken, setLobbyResumeToken } from '@/features/lobby/lobbyAuthStorage'
 import wsClient from '../api/wsClient'
 
 function useWebSocketGame() {
   const [wsState, setWsState] = useState({ connected: false, sessionId: null, gameId: null, error: null })
   const [wsMessage, setWsMessage] = useState(null)
+  const [pendingJoinIntent, setPendingJoinIntent] = useState('manual')
 
   useEffect(() => {
     wsClient.onOpen = () => setWsState((s) => ({ ...s, connected: true }))
     wsClient.onClose = () => setWsState((s) => ({ ...s, connected: false }))
     wsClient.onError = (e) => setWsState((s) => ({ ...s, error: e }))
     wsClient.onMessage = (msg) => {
-      setWsMessage(msg)
+      if (msg.type === 'JOINED_GAME') {
+        const enriched = { ...msg, joinIntent: pendingJoinIntent }
+        setWsMessage(enriched)
+      } else {
+        setWsMessage(msg)
+      }
       if (msg.type === 'CONNECTED') setWsState((s) => ({ ...s, sessionId: msg.sessionId }))
-      if (msg.type === 'GAME_CREATED') setWsState((s) => ({ ...s, gameId: msg.gameId }))
-      if (msg.type === 'JOINED_GAME') setWsState((s) => ({ ...s, gameId: msg.gameId }))
+      if (msg.type === 'GAME_CREATED') {
+        if (msg.gameId && msg.resumeToken) setLobbyResumeToken(msg.gameId, msg.resumeToken)
+        setWsState((s) => ({ ...s, gameId: msg.gameId }))
+      }
+      if (msg.type === 'JOINED_GAME') {
+        if (msg.gameId && msg.resumeToken) setLobbyResumeToken(msg.gameId, msg.resumeToken)
+        setWsState((s) => ({ ...s, gameId: msg.gameId }))
+        setPendingJoinIntent('manual')
+      }
     }
     return () => {
       wsClient.close()
@@ -28,17 +42,39 @@ function useWebSocketGame() {
     ensureConnected()
     wsClient.send({ type: 'CREATE_GAME', maxPlayers })
   }
-  const joinGame = (gameId) => {
+  const joinGame = (gameId, intent = 'manual') => {
     ensureConnected()
-    wsClient.send({ type: 'JOIN_GAME', gameId })
+    const normalized = String(gameId ?? '').trim().toLowerCase()
+    const resumeToken = getLobbyResumeToken(normalized)
+    const normalizedIntent = intent === 'auto_resume' ? 'auto_resume' : 'manual'
+    setPendingJoinIntent(normalizedIntent)
+    wsClient.send({ type: 'JOIN_GAME', gameId: normalized, resumeToken: resumeToken ?? undefined })
   }
   const startGame = (gameId) => {
     ensureConnected()
     wsClient.send({ type: 'START_GAME', gameId })
   }
+  const leaveGame = () => {
+    ensureConnected()
+    wsClient.send({ type: 'LEAVE_GAME' })
+  }
+  const updateLobbyConfig = (config) => {
+    ensureConnected()
+    wsClient.send({ type: 'UPDATE_LOBBY_CONFIG', ...config })
+  }
   const send = (obj) => wsClient.send(obj)
 
-  return { wsState, wsMessage, ensureConnected, createGame, joinGame, startGame, send }
+  return {
+    wsState,
+    wsMessage,
+    ensureConnected,
+    createGame,
+    joinGame,
+    startGame,
+    leaveGame,
+    updateLobbyConfig,
+    send,
+  }
 }
 
 export default useWebSocketGame
