@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import BoardScene from './BoardScene'
+import BoardScene from '@/features/scene/BoardScene'
 
 function GameSetupMenu({
   setup,
