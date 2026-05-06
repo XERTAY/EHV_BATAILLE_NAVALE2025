@@ -6,6 +6,7 @@ import ShootModePanel from '@/features/battle/ShootModePanel'
 import GameBanner from '@/features/hud/GameBanner'
 import SavePanel from '@/features/hud/SavePanel'
 import TurnBanner from '@/features/hud/TurnBanner'
+import OpponentPresencePanel from '@/features/hud/OpponentPresencePanel'
 import PlacementConfirmPrompt from '@/features/placement/PlacementConfirmPrompt'
 import PlacementPanel from '@/features/placement/PlacementPanel'
 import PlacementWaitBanner from '@/features/placement/PlacementWaitBanner'
@@ -75,11 +76,22 @@ export default function GameScreen({
   boardSize,
   boardStatesById,
   recentImpactsByBoard,
+  opponentPresence,
   interactiveBoards,
   placementPreview,
   waveMode,
   benchmarkEnabled,
 }) {
+  const placementAlreadyValidatedByServer = String(errorMessage ?? '')
+    .toLowerCase()
+    .includes('placement deja valide')
+  const shouldShowPlacementWaitBanner = localPlacementCompleted || placementAlreadyValidatedByServer
+  const shouldShowPlacementPanel =
+    gamePhase === 'PLACEMENT'
+    && !localPlacementLocked
+    && !placementAlreadyValidatedByServer
+    && !localPlacementCompleted
+
   return (
     <main className="app-root">
       <LayoutControls
@@ -105,6 +117,7 @@ export default function GameScreen({
         isGameOver={isGameOver}
         didLocalPlayerWin={didLocalPlayerWin}
       />
+      <OpponentPresencePanel presence={opponentPresence} />
       <CompassWidget
         cameraFacingDirection={cameraFacingDirection}
         cameraDirectionLabel={cameraDirectionLabel}
@@ -124,8 +137,8 @@ export default function GameScreen({
           onConfirm={onConfirmPlacement}
         />
       ) : null}
-      {localPlacementCompleted ? <PlacementWaitBanner /> : null}
-      {gamePhase === 'PLACEMENT' && !localPlacementCompleted ? (
+      {shouldShowPlacementWaitBanner ? <PlacementWaitBanner /> : null}
+      {shouldShowPlacementPanel ? (
         <PlacementPanel
           localPlayerNumber={localPlayerNumber}
           showShipSelectionRow={showShipSelectionRow}

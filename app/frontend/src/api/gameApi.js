@@ -1,8 +1,15 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+import { getLobbyResumeToken } from '@/features/lobby/lobbyAuthStorage'
 
 async function callApi(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers ?? {}) }
+  const authGameId = options.authGameId ? String(options.authGameId).trim().toLowerCase() : ''
+  if (authGameId) {
+    const token = getLobbyResumeToken(authGameId)
+    if (token) headers.Authorization = `Bearer ${token}`
+  }
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   })
   if (!response.ok) {
@@ -42,6 +49,7 @@ export function resetGame(
   return callApi('/game/reset', {
     method: 'POST',
     body: JSON.stringify(body),
+    authGameId: body.gameId,
   })
 }
 
@@ -50,7 +58,9 @@ export function getGameState(player, lobbyGameId) {
   if (lobbyGameId != null && String(lobbyGameId).trim() !== '') {
     params.set('gameId', String(lobbyGameId).trim())
   }
-  return callApi(`/game/state?${params.toString()}`)
+  return callApi(`/game/state?${params.toString()}`, {
+    authGameId: lobbyGameId,
+  })
 }
 
 export function placeShip(payload) {
@@ -63,6 +73,7 @@ export function placeShip(payload) {
   return callApi('/game/place', {
     method: 'POST',
     body: JSON.stringify(body),
+    authGameId: body.gameId,
   })
 }
 
@@ -76,6 +87,7 @@ export function removePlacedShip(payload) {
   return callApi('/game/placement/remove', {
     method: 'POST',
     body: JSON.stringify(body),
+    authGameId: body.gameId,
   })
 }
 
@@ -87,6 +99,7 @@ export function confirmPlacement(payload) {
   return callApi('/game/placement/confirm', {
     method: 'POST',
     body: JSON.stringify(body),
+    authGameId: body.gameId,
   })
 }
 
@@ -105,6 +118,7 @@ export function fireAt(payload) {
   return callApi('/game/fire', {
     method: 'POST',
     body: JSON.stringify(body),
+    authGameId: body.gameId,
   })
 }
 
@@ -116,6 +130,7 @@ export function runAiStep(lobbyGameId) {
       : ''
   return callApi(`/game/ai-step${params}`, {
     method: 'POST',
+    authGameId: lobbyGameId,
   })
 }
 

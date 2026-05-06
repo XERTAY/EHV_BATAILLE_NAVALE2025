@@ -16,6 +16,13 @@ const RESET_LOBBY_STATE = Object.freeze({
   playerNumber: 1,
 })
 
+const LOBBY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isPlacementAlreadyConfirmedError(error) {
+  const message = String(error?.message ?? '').toLowerCase()
+  return message.includes('placement deja valide')
+}
+
 function buildPlacementOffsets({ orientation, x, y, shipLength }) {
   if (orientation === 'EAST') return { x, y, orientation: 'HORIZONTAL' }
   if (orientation === 'SOUTH') return { x, y, orientation: 'VERTICAL' }
@@ -73,6 +80,7 @@ export default function useGameActions({
     setScreen,
     setLayoutSet,
     setStatusMessage,
+    setLocalPlacementWaiting,
     loading,
     gameState,
   } = ui
@@ -129,6 +137,7 @@ export default function useGameActions({
           options.bootstrapViewerPlayer ?? 1,
         )
       }
+      setLocalPlacementWaiting(false)
       resetPlacement()
       setScreen('game')
       setStatusMessage(
@@ -140,15 +149,16 @@ export default function useGameActions({
       setScreen('menu')
       setStatusMessage(error?.message ? `Impossible de demarrer: ${error.message}` : 'Impossible de demarrer la partie.')
     }
-  }, [setup, bootstrapGame, loadGameAction, resetPlacement, setLayoutSet, setLobbyState, setScreen, setStatusMessage])
+  }, [setup, bootstrapGame, loadGameAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage])
 
   const enterGameScreenWithState = useCallback((state, status) => {
     const playerCountFromState = state?.boards?.length === 4 ? 4 : 2
     setLayoutSet(playerCountFromState === 4 ? 'star4' : 'faceoff')
+    setLocalPlacementWaiting(false)
     resetPlacement()
     setScreen('game')
     if (status) setStatusMessage(status)
-  }, [resetPlacement, setLayoutSet, setScreen, setStatusMessage])
+  }, [resetPlacement, setLayoutSet, setLocalPlacementWaiting, setScreen, setStatusMessage])
 
   const handleSaveCurrentGame = useCallback(async () => {
     try {
@@ -161,9 +171,10 @@ export default function useGameActions({
   }, [saveGameAction, setup.saveFileName, refreshSaves, setStatusMessage])
 
   const handleBackToMenu = useCallback(() => {
+    setLocalPlacementWaiting(false)
     setScreen('menu')
     setStatusMessage('Menu de configuration ouvert.')
-  }, [setScreen, setStatusMessage])
+  }, [setLocalPlacementWaiting, setScreen, setStatusMessage])
 
   const sendPlacement = useCallback(async ({ boardId, x, y, label }) => {
     if (localPlacementLocked) {
@@ -273,7 +284,10 @@ export default function useGameActions({
 
   const handleConfirmPlacement = useCallback(async () => {
     if (loading || !gameState || gamePhase !== PHASE_PLACEMENT) return
-    if (localPlacementLocked) return
+    if (localPlacementLocked) {
+      setLocalPlacementWaiting(true)
+      return
+    }
     if (remainingShips.length > 0) {
       setStatusMessage('Placez tous les navires avant de valider.')
       return
@@ -282,15 +296,30 @@ export default function useGameActions({
       const payload = { player: localPlayerNumber }
       if (lobbyState.inLobby && lobbyState.gameId) payload.gameId = lobbyState.gameId
       await confirmPlacementAction(payload)
+      setLocalPlacementWaiting(true)
       setStatusMessage('Placement valide. En attente des autres joueurs...')
       setRemovalModeEnabled(false)
-    } catch {
-      // L'erreur est geree dans le hook API.
+    } catch (error) {
+      // Si le backend indique que le placement est deja valide, on force une
+      // resynchronisation d'etat pour remettre l'UI en phase.
+      if (!isPlacementAlreadyConfirmedError(error)) {
+        setLocalPlacementWaiting(false)
+        return
+      }
+      const lobbyScope = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+      try {
+        await refreshStateAction(localPlayerNumber, lobbyScope)
+      } catch {
+        // L'erreur de sync est deja geree dans le hook API.
+      }
+      setLocalPlacementWaiting(true)
+      setStatusMessage('Placement deja valide. En attente des autres joueurs...')
+      setRemovalModeEnabled(false)
     }
   }, [
     loading, gameState, gamePhase, localPlacementLocked, remainingShips.length,
-    confirmPlacementAction, localPlayerNumber, setRemovalModeEnabled,
-    lobbyState.inLobby, lobbyState.gameId, setStatusMessage,
+    confirmPlacementAction, localPlayerNumber, setLocalPlacementWaiting, setRemovalModeEnabled,
+    lobbyState.inLobby, lobbyState.gameId, refreshStateAction, setStatusMessage,
   ])
 
   const handleRemoveSelectedShip = useCallback(async () => {
@@ -317,11 +346,25 @@ export default function useGameActions({
     ws.createGame(maxPlayers)
   }, [ws])
 
-  const handleJoinLobby = useCallback((gameId) => {
-    const trimmed = gameId?.trim()
-    if (!trimmed) return
-    ws.joinGame(trimmed)
-  }, [ws])
+  const handleJoinLobby = useCallback((gameId, intent = 'manual') => {
+    const normalized = gameId?.trim()?.toLowerCase()
+    if (!normalized) return
+    if (normalized.includes('…') || normalized.includes('...')) {
+      setStatusMessage('ID de lobby tronque detecte. Utilisez l ID complet copie depuis "Copier l ID".')
+      return
+    }
+    if (!LOBBY_ID_PATTERN.test(normalized)) {
+      setStatusMessage('ID de lobby invalide. Format attendu: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.')
+      return
+    }
+    ws.joinGame(normalized, intent)
+  }, [setStatusMessage, ws])
+
+  const handleLeaveLobby = useCallback(() => {
+    ws.leaveGame()
+    setLobbyState(RESET_LOBBY_STATE)
+    setStatusMessage('Lobby quitte.')
+  }, [setLobbyState, setStatusMessage, ws])
 
   const handleStartLobbyGame = useCallback(async (setupPatch = {}) => {
     if (!lobbyState.isHost || !lobbyState.gameId) return
@@ -349,6 +392,7 @@ export default function useGameActions({
     handleRemoveSelectedShip,
     handleCreateLobby,
     handleJoinLobby,
+    handleLeaveLobby,
     handleStartLobbyGame,
   }
 }

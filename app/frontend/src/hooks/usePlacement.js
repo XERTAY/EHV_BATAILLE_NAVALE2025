@@ -21,6 +21,8 @@ const ORIENTATION_SEQUENCE = ['EAST', 'SOUTH', 'WEST', 'NORTH']
 export default function usePlacement({
   currentPlayer,
   gamePhase,
+  localPlacementLocked = false,
+  placementInteractionDisabled = false,
   boardSize = 10,
   fleetShipSizes = [5, 4, 3, 3, 2],
 }) {
@@ -72,7 +74,15 @@ export default function usePlacement({
   const selectedShipSize = selectedShip?.size ?? 1
 
   const placementPreview = useMemo(() => {
-    if (!hoveredPlacementCell || !selectedShip || gamePhase !== 'PLACEMENT') return []
+    const noShipLeftToPlace = remainingShips.length === 0
+    if (
+      !hoveredPlacementCell
+      || !selectedShip
+      || gamePhase !== 'PLACEMENT'
+      || localPlacementLocked
+      || noShipLeftToPlace
+      || placementInteractionDisabled
+    ) return []
     const directionByOrientation = {
       EAST: { dx: 1, dy: 0 },
       SOUTH: { dx: 0, dy: 1 },
@@ -88,7 +98,16 @@ export default function usePlacement({
       cells.push({ x, y, inBounds, previewDirection: placementOrientation })
     }
     return cells
-  }, [hoveredPlacementCell, selectedShip, placementOrientation, gamePhase, boardSize])
+  }, [
+    hoveredPlacementCell,
+    selectedShip,
+    placementOrientation,
+    gamePhase,
+    boardSize,
+    localPlacementLocked,
+    remainingShips.length,
+    placementInteractionDisabled,
+  ])
 
   const handlePlacementSuccess = useCallback((player, shipType) => {
     setRemovalModeEnabled(false)
@@ -141,13 +160,25 @@ export default function usePlacement({
       setHoveredPlacementCell(null)
       return
     }
+    if (localPlacementLocked) {
+      setHoveredPlacementCell(null)
+      return
+    }
+    if (remainingShips.length === 0) {
+      setHoveredPlacementCell(null)
+      return
+    }
+    if (placementInteractionDisabled) {
+      setHoveredPlacementCell(null)
+      return
+    }
     const { boardId, x, y } = cellData
     if (gamePhase !== 'PLACEMENT' || boardId !== expectedOwnBoardId) {
       setHoveredPlacementCell(null)
       return
     }
     setHoveredPlacementCell({ x, y })
-  }, [gamePhase])
+  }, [gamePhase, localPlacementLocked, remainingShips.length, placementInteractionDisabled])
 
   return {
     selectedShipType: effectiveSelectedShipType,

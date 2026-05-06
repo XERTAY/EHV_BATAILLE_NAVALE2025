@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import LobbyWaitingModal from '@/features/lobby/LobbyWaitingModal'
 import BoardScene from '@/features/scene/BoardScene'
 
 function GameSetupMenu({
@@ -10,6 +11,8 @@ function GameSetupMenu({
   onCreateLobby,
   onJoinLobby,
   onRefreshSaves,
+  onLeaveLobby,
+  onUpdateLobbyConfig,
   loading,
   wsConnected,
   ensureWs,
@@ -20,6 +23,7 @@ function GameSetupMenu({
   const [fleetModalOpen, setFleetModalOpen] = useState(false)
   const [joinGameId, setJoinGameId] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copier l ID')
+  const createLobbyRequestedRef = useRef(false)
   const totalShipCells = useMemo(() => {
     return setup.fleetShipSizes.reduce((sum, size) => sum + Number(size || 0), 0)
   }, [setup.fleetShipSizes])
@@ -74,6 +78,7 @@ function GameSetupMenu({
   const isGuestInLobby = Boolean(shouldShareId && lobby?.inLobby && !lobby?.isHost)
   const isHostInLobby = Boolean(shouldShareId && lobby?.inLobby && lobby?.isHost)
   const canLaunchNewGame = shouldShareId ? Boolean(isHostInLobby && canLaunchFromLobby && canStart) : canStart
+  const playersLabel = `Joueurs: ${lobby?.players ?? 0}/${lobby?.maxPlayers ?? setup.playerCount}`
 
   const handleCopyGameId = async () => {
     if (!lobby?.gameId) return
@@ -124,15 +129,59 @@ function GameSetupMenu({
     // Ne pas attendre wsConnected: createGame/join appellent ensureOpen avant send.
     if (menuStep !== 'new' || !shouldShareId) return
     if (!lobby?.inLobby) {
+      if (createLobbyRequestedRef.current) return
+      createLobbyRequestedRef.current = true
       onCreateLobby(setup.playerCount)
       return
     }
+    createLobbyRequestedRef.current = false
     // Si l'hote modifie 2/4 joueurs avant que d'autres rejoignent,
     // on recree le lobby pour appliquer la nouvelle capacite max.
     if (lobby.isHost && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
       onCreateLobby(setup.playerCount)
     }
   }, [menuStep, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
+
+  useEffect(() => {
+    if (menuStep !== 'new' || !shouldShareId) {
+      createLobbyRequestedRef.current = false
+    }
+  }, [menuStep, shouldShareId])
+
+  useEffect(() => {
+    if (lobby?.inLobby && !lobby?.isHost && menuStep !== 'online') {
+      setMenuStep('online')
+    }
+  }, [lobby?.inLobby, lobby?.isHost, menuStep])
+
+  useEffect(() => {
+    if (menuStep !== 'new' || !shouldShareId || !lobby?.inLobby || !lobby?.isHost) return
+    const fleetShipCount = setup.fleetShipSizes.length
+    const fleetTotalCells = setup.fleetShipSizes.reduce((sum, size) => sum + (Number(size) || 0), 0)
+    const payload = {
+      boardSize: setup.boardSize,
+      playerCount: setup.playerCount,
+      humanPlayers: effectiveHumanPlayers,
+      aiPlayers: effectiveAiPlayers,
+      fleetShipCount,
+      fleetTotalCells,
+    }
+    const timeoutId = window.setTimeout(() => {
+      onUpdateLobbyConfig?.(payload)
+    }, 180)
+    return () => window.clearTimeout(timeoutId)
+  }, [
+    menuStep,
+    shouldShareId,
+    lobby?.inLobby,
+    lobby?.isHost,
+    setup.boardSize,
+    setup.playerCount,
+    setup.fleetShipSizes,
+    effectiveHumanPlayers,
+    effectiveAiPlayers,
+    onUpdateLobbyConfig,
+  ])
 
   return (
     <main className="menu-screen">
@@ -407,6 +456,20 @@ function GameSetupMenu({
           )}
         </div>
         {statusMessage && <div className="menu-status">{statusMessage}</div>}
+
+        <LobbyWaitingModal
+          open={Boolean(lobby?.inLobby && !lobby?.isHost)}
+          preview={lobby?.lobbyConfigPreview ?? {
+            boardSize: 10,
+            playerCount: 2,
+            humanPlayers: 2,
+            aiPlayers: 0,
+            fleetShipCount: 5,
+            fleetTotalCells: 17,
+          }}
+          playersLabel={playersLabel}
+          onLeave={() => onLeaveLobby?.()}
+        />
 
         {fleetModalOpen && (
           <div className="menu-modal-backdrop" role="presentation" onClick={() => setFleetModalOpen(false)}>

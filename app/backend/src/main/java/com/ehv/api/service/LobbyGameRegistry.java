@@ -18,6 +18,33 @@ public final class LobbyGameRegistry {
         if (lobbyGameId == null || lobbyGameId.isBlank()) {
             return sharedLocalGame;
         }
-        return lobbyGames.computeIfAbsent(lobbyGameId.strip(), key -> new DuelGameService());
+        return lobbyGames.computeIfAbsent(normalizeLobbyId(lobbyGameId), key -> new DuelGameService());
+    }
+
+    public DuelGameService getLobbyIfPresent(String lobbyGameId) {
+        String normalized = normalizeLobbyId(lobbyGameId);
+        if (normalized == null) {
+            return null;
+        }
+        return lobbyGames.get(normalized);
+    }
+
+    public void removeLobby(String lobbyGameId) {
+        String normalized = normalizeLobbyId(lobbyGameId);
+        if (normalized == null) {
+            return;
+        }
+        lobbyGames.remove(normalized);
+    }
+
+    public int lobbyCount() {
+        return lobbyGames.size();
+    }
+
+    private static String normalizeLobbyId(String lobbyGameId) {
+        if (lobbyGameId == null || lobbyGameId.isBlank()) {
+            return null;
+        }
+        return lobbyGameId.strip().toLowerCase();
     }
 }

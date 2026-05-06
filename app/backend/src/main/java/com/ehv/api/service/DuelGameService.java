@@ -229,6 +229,30 @@ public final class DuelGameService {
         }
     }
 
+    public synchronized GameStateResponse forfeitPlayer(int forfeitingPlayer) {
+        validatePlayer(forfeitingPlayer);
+        if (phase == DuelPhase.GAME_OVER) {
+            return getStateForPlayer(viewSlotForClients());
+        }
+        Integer nextWinner = null;
+        for (int p = 1; p <= playerCount; p++) {
+            if (p == forfeitingPlayer) {
+                continue;
+            }
+            if (!getPlayerById(p).hasLost()) {
+                nextWinner = p;
+                break;
+            }
+        }
+        winner = nextWinner;
+        if (winner != null) {
+            currentPlayer = winner;
+        }
+        phase = DuelPhase.GAME_OVER;
+        game.setState(GameState.FINISHED);
+        return getStateForPlayer(viewSlotForClients());
+    }
+
     private static int normalizePlayerCount(Integer value) {
         if (value != null && value == 4) {
             return 4;

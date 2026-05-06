@@ -88,6 +88,9 @@ function buildPlacementOverlayLabel({ lobbyInLobby, isDuelWithAi, currentIsAi, r
   if (lobbyInLobby && !isDuelWithAi) {
     return 'Placez vos navires puis validez votre flotte.'
   }
+  if (remainingShipsCount === 0 && !currentIsAi) {
+    return 'Flotte prete - validez votre flotte.'
+  }
   if (isDuelWithAi && !currentIsAi && remainingShipsCount === 0) {
     return "Placement de l'IA en cours..."
   }
@@ -173,14 +176,10 @@ export function getGameSummary(setup) {
   return `${setup.boardSize}x${setup.boardSize} \u00b7 ${setup.playerCount} joueurs \u00b7 ${setup.humanPlayers} humains${aiPart} \u00b7 ${setup.fleetShipSizes.length} navires`
 }
 
-const SHORT_ID_LENGTH = 14
-
-/** Libelle "Salon abc123...456" pour le bandeau de partie. */
+/** Libelle "Salon <gameId>" pour le bandeau de partie. */
 export function getLobbyPartLabel(lobbyState) {
   if (!lobbyState?.inLobby || !lobbyState.gameId) return null
-  const id = lobbyState.gameId
-  const shortId = id.length > SHORT_ID_LENGTH ? `${id.slice(0, 8)}\u2026${id.slice(-4)}` : id
-  return `Salon ${shortId}`
+  return `Salon ${lobbyState.gameId}`
 }
 
 /** Vrai si le mode tir doit etre propose au joueur local. */

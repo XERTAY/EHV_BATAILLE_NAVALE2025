@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import '../App.css'
 import { BOARD_CONFIGS } from '@/config/boardConfigs'
@@ -30,6 +30,8 @@ export default function App() {
   const [showCoordinates, setShowCoordinates] = useState(true)
   const [statusMessage, setStatusMessage] = useState('Initialisation de la partie...')
   const [availableSaves, setAvailableSaves] = useState([])
+  const [localPlacementWaiting, setLocalPlacementWaiting] = useState(false)
+  const autoJoinTriedRef = useRef(false)
 
   const { setup, applySetupPatch } = useSetupPersistence()
   const api = useGameApi()
@@ -48,16 +50,7 @@ export default function App() {
     refreshSaves()
   }, [refreshSaves])
 
-  const placement = usePlacement({
-    currentPlayer: gameState?.currentPlayer ?? 1,
-    gamePhase: gameState?.phase,
-    boardSize: gameState?.boardSize ?? setup.boardSize ?? 10,
-    fleetShipSizes: setup.fleetShipSizes,
-  })
-
-  // Pre-calcul de l'identifiant de plateau du joueur local (necessaire avant
-  // useEnemyImpactReveal). Le selecteur final (`useGameSelectors`) memorise la
-  // meme derivation, mais on l'instancie ici en amont pour briser le cycle.
+  // Joueur local preliminaire (utilisable avant les selecteurs finaux).
   const preliminaryLocalPlayerNumber = useMemo(
     () => getLocalPlayerNumber({
       lobbyState: { inLobby: false, playerNumber: 1 },
@@ -66,6 +59,25 @@ export default function App() {
     }),
     [gameState],
   )
+
+  const placementLockedByPlayer = gameState?.placementLockedByPlayer ?? []
+  const localPlacementLocked = Boolean(
+    placementLockedByPlayer[preliminaryLocalPlayerNumber - 1],
+  )
+  const localPlacementLockedOrWaiting = localPlacementLocked || localPlacementWaiting
+
+  const placement = usePlacement({
+    currentPlayer: preliminaryLocalPlayerNumber,
+    gamePhase: gameState?.phase,
+    localPlacementLocked: localPlacementLockedOrWaiting,
+    placementInteractionDisabled: loading,
+    boardSize: gameState?.boardSize ?? setup.boardSize ?? 10,
+    fleetShipSizes: setup.fleetShipSizes,
+  })
+
+  // Pre-calcul de l'identifiant de plateau du joueur local (necessaire avant
+  // useEnemyImpactReveal). Le selecteur final (`useGameSelectors`) memorise la
+  // meme derivation, mais on l'instancie ici en amont pour briser le cycle.
   const preliminaryBoards = useMemo(() => BOARD_CONFIGS[layoutSet], [layoutSet])
   const preliminaryExpectedOwnBoardId = useMemo(
     () => getExpectedOwnBoardId({ boards: preliminaryBoards, localPlayerNumber: preliminaryLocalPlayerNumber }),
@@ -76,11 +88,6 @@ export default function App() {
     [gameState, preliminaryExpectedOwnBoardId],
   )
 
-  const placementLockedByPlayer = gameState?.placementLockedByPlayer ?? []
-  const localPlacementLocked = Boolean(
-    placementLockedByPlayer[preliminaryLocalPlayerNumber - 1],
-  )
-
   const enemyImpactReveal = useEnemyImpactReveal({
     gameState,
     clientOwnBoardId: preliminaryClientOwnBoardId,
@@ -88,22 +95,33 @@ export default function App() {
   })
   const { delayedOwnBoardCells, recentImpactsByBoard } = enemyImpactReveal
 
+  const handleEnterGameScreenWithState = useCallback((state, status) => {
+    const playerCountFromState = state?.boards?.length === 4 ? 4 : 2
+    setLayoutSet(playerCountFromState === 4 ? 'star4' : 'faceoff')
+    setLocalPlacementWaiting(false)
+    placement.resetPlacement()
+    setScreen('game')
+    if (status) setStatusMessage(status)
+  }, [placement.resetPlacement])
+
   const lobbyApi = useLobbyState({
     wsMessage: ws.wsMessage,
     screen,
     fallbackPlayerCount: setup.playerCount,
     refreshStateAction: api.refreshStateAction,
     syncStateAction: api.syncStateAction,
-    enterGameScreenWithState: (state, status) => {
-      const playerCountFromState = state?.boards?.length === 4 ? 4 : 2
-      setLayoutSet(playerCountFromState === 4 ? 'star4' : 'faceoff')
-      placement.resetPlacement()
-      setScreen('game')
-      if (status) setStatusMessage(status)
-    },
+    enterGameScreenWithState: handleEnterGameScreenWithState,
     onStatus: setStatusMessage,
   })
   const { lobbyState } = lobbyApi
+
+  useEffect(() => {
+    if (screen !== 'game' || !lobbyState?.inLobby || !lobbyState?.gameId) return undefined
+    const beat = window.setInterval(() => {
+      ws.send({ type: 'HEARTBEAT', gameId: lobbyState.gameId })
+    }, 5000)
+    return () => window.clearInterval(beat)
+  }, [screen, lobbyState?.inLobby, lobbyState?.gameId, ws])
 
   // Mode tir : la `shouldOffer`/`isPlayerInShootMode` est calculee plus bas avec
   // les selecteurs ; ici on instancie le countdown avec les valeurs derivees.
@@ -187,23 +205,64 @@ export default function App() {
 
   const actions = useGameActions({
     api: { ...api, refreshSaves },
-    ui: { setScreen, setLayoutSet, setStatusMessage, loading, gameState },
+    ui: {
+      setScreen,
+      setLayoutSet,
+      setStatusMessage,
+      setLocalPlacementWaiting,
+      loading,
+      gameState,
+    },
     setup,
     selectors,
     placement: {
       ...placement,
       canRemoveSelectedShip: placement.placedShips.some((ship) => ship.type === placement.selectedShipType),
-      localPlacementLocked,
+      localPlacementLocked: localPlacementLockedOrWaiting,
     },
     lobby: lobbyApi,
     ws,
   })
 
+  useEffect(() => {
+    const currentUrl = new URL(window.location.href)
+    const currentId = currentUrl.searchParams.get('gameId')
+    const normalizedLobbyId = lobbyState?.gameId ? String(lobbyState.gameId).trim().toLowerCase() : ''
+    const phaseState =
+      screen === 'game'
+        ? (selectors.gamePhase === 'GAME_OVER' ? 'finished' : 'active')
+        : null
+    if (normalizedLobbyId) {
+      if (currentId !== normalizedLobbyId) {
+        currentUrl.searchParams.set('gameId', normalizedLobbyId)
+      }
+      if (phaseState) currentUrl.searchParams.set('state', phaseState)
+      else currentUrl.searchParams.delete('state')
+      window.history.replaceState(null, '', currentUrl)
+      return
+    }
+    if (currentId) {
+      currentUrl.searchParams.delete('gameId')
+      currentUrl.searchParams.delete('state')
+      window.history.replaceState(null, '', currentUrl)
+    }
+  }, [lobbyState?.gameId, screen, selectors.gamePhase])
+
+  useEffect(() => {
+    if (screen !== 'menu' || lobbyState?.inLobby || autoJoinTriedRef.current) return
+    const gameIdFromUrl = new URL(window.location.href).searchParams.get('gameId')
+    const normalized = String(gameIdFromUrl ?? '').trim().toLowerCase()
+    if (!normalized) return
+    autoJoinTriedRef.current = true
+    actions.handleJoinLobby(normalized, 'auto_resume')
+    setStatusMessage(`Tentative de reconnexion a la partie ${normalized}...`)
+  }, [screen, lobbyState?.inLobby, actions.handleJoinLobby])
+
   const gameSummary = getGameSummary(setup)
-  const localPlacementCompleted = selectors.gamePhase === 'PLACEMENT' && localPlacementLocked
+  const localPlacementCompleted = selectors.gamePhase === 'PLACEMENT' && localPlacementLockedOrWaiting
   const shouldShowShootModePrompt = selectors.shouldOfferShootMode && !shoot.shootModeActive
   const shouldShowPlacementConfirmPrompt =
-    selectors.gamePhase === 'PLACEMENT' && !localPlacementLocked && placement.remainingShips.length === 0
+    selectors.gamePhase === 'PLACEMENT' && !localPlacementLockedOrWaiting && placement.remainingShips.length === 0
 
   if (screen === 'menu') {
     return (
@@ -216,6 +275,8 @@ export default function App() {
         onCreateLobby={actions.handleCreateLobby}
         onJoinLobby={actions.handleJoinLobby}
         onRefreshSaves={refreshSaves}
+        onLeaveLobby={actions.handleLeaveLobby}
+        onUpdateLobbyConfig={ws.updateLobbyConfig}
         loading={loading}
         wsConnected={ws.wsState.connected}
         ensureWs={ws.ensureConnected}
@@ -258,7 +319,7 @@ export default function App() {
       shootModeProgress={shoot.shootModeProgress}
       shouldShowPlacementConfirmPrompt={shouldShowPlacementConfirmPrompt}
       localPlacementCompleted={localPlacementCompleted}
-      localPlacementLocked={localPlacementLocked}
+      localPlacementLocked={localPlacementLockedOrWaiting}
       showShipSelectionRow={placement.remainingShips.length > 0 || placement.removalModeEnabled}
       selectedShipType={placement.selectedShipType}
       setSelectedShipType={placement.setSelectedShipType}
@@ -280,6 +341,7 @@ export default function App() {
       boardSize={selectors.boardSize}
       boardStatesById={selectors.boardStatesById}
       recentImpactsByBoard={recentImpactsByBoard}
+      opponentPresence={lobbyState?.opponentPresence}
       interactiveBoards={selectors.interactiveBoards}
       placementPreview={placement.placementPreview}
       waveMode="gpu"

@@ -4,6 +4,8 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import { TGALoader } from 'three/examples/jsm/loaders/TGALoader.js'
 
 import dacar2ModelUrl from '@/assets/models/dacar2.fbx?url'
+import pirataGallionModelUrl from '@/assets/models/PirataGallion.fbx?url'
+import pirataShipAModelUrl from '@/assets/models/PirataShipA.fbx?url'
 import waterTransportMapUrl from '@/assets/WaterTransport.tga?url'
 import { buildPreviewSegment, extractShipSegments } from '@/utils/shipSegmentsFromGrid'
 
@@ -18,6 +20,8 @@ import {
 const PREVIEW_GHOST_OPACITY = 0.42
 const IMPACTED_DEFAULT_OPACITY = 0.24
 const IMPACTED_ACTIVE_FX_OPACITY = 0.08
+const AIRCRAFT_CARRIER_LENGTH = 5
+const GALLION_LENGTH = 6
 
 function pickSegmentOpacity({ segment, impactedSegmentKeys, hasActiveDamageFx }) {
   if (segment.ghost) return PREVIEW_GHOST_OPACITY
@@ -26,15 +30,41 @@ function pickSegmentOpacity({ segment, impactedSegmentKeys, hasActiveDamageFx })
 }
 
 function useFleetTemplate() {
-  const fbx = useLoader(FBXLoader, dacar2ModelUrl)
+  const [defaultFbx, aircraftCarrierFbx, gallionFbx] = useLoader(FBXLoader, [
+    dacar2ModelUrl,
+    pirataShipAModelUrl,
+    pirataGallionModelUrl,
+  ])
   const waterTransportMap = useLoader(TGALoader, waterTransportMapUrl)
-  const templateRoot = useMemo(() => {
-    normalizeLoadedFbxMaterials(fbx)
-    applyWaterTransportDiffuse(fbx, waterTransportMap)
-    return fbx
-  }, [fbx, waterTransportMap])
-  const modelInfo = useMemo(() => computeModelBounds(templateRoot), [templateRoot])
-  return { templateRoot, modelInfo }
+  const defaultTemplate = useMemo(() => {
+    normalizeLoadedFbxMaterials(defaultFbx)
+    applyWaterTransportDiffuse(defaultFbx, waterTransportMap)
+    return defaultFbx
+  }, [defaultFbx, waterTransportMap])
+  const aircraftCarrierTemplate = useMemo(() => {
+    normalizeLoadedFbxMaterials(aircraftCarrierFbx)
+    applyWaterTransportDiffuse(aircraftCarrierFbx, waterTransportMap)
+    return aircraftCarrierFbx
+  }, [aircraftCarrierFbx, waterTransportMap])
+  const gallionTemplate = useMemo(() => {
+    normalizeLoadedFbxMaterials(gallionFbx)
+    applyWaterTransportDiffuse(gallionFbx, waterTransportMap)
+    return gallionFbx
+  }, [gallionFbx, waterTransportMap])
+  const defaultModelInfo = useMemo(() => computeModelBounds(defaultTemplate), [defaultTemplate])
+  const aircraftCarrierModelInfo = useMemo(
+    () => computeModelBounds(aircraftCarrierTemplate),
+    [aircraftCarrierTemplate],
+  )
+  const gallionModelInfo = useMemo(() => computeModelBounds(gallionTemplate), [gallionTemplate])
+  return {
+    defaultTemplate,
+    aircraftCarrierTemplate,
+    gallionTemplate,
+    defaultModelInfo,
+    aircraftCarrierModelInfo,
+    gallionModelInfo,
+  }
 }
 
 function useSegments({ cellStates, cells, previewCells, showPreviewGhost }) {
@@ -93,7 +123,14 @@ export default function FleetShipMeshesInner({
   flipRows,
   showPreviewGhost,
 }) {
-  const { templateRoot, modelInfo } = useFleetTemplate()
+  const {
+    defaultTemplate,
+    aircraftCarrierTemplate,
+    gallionTemplate,
+    defaultModelInfo,
+    aircraftCarrierModelInfo,
+    gallionModelInfo,
+  } = useFleetTemplate()
   const segments = useSegments({ cellStates, cells, previewCells, showPreviewGhost })
 
   const impactedSegmentKeys = useMemo(() => {
@@ -113,8 +150,20 @@ export default function FleetShipMeshesInner({
   return segments.map((segment) => (
     <ShipInstance
       key={segment.key}
-      template={templateRoot}
-      modelInfo={modelInfo}
+      template={
+        segment.length === AIRCRAFT_CARRIER_LENGTH
+          ? aircraftCarrierTemplate
+          : segment.length === GALLION_LENGTH
+            ? gallionTemplate
+            : defaultTemplate
+      }
+      modelInfo={
+        segment.length === AIRCRAFT_CARRIER_LENGTH
+          ? aircraftCarrierModelInfo
+          : segment.length === GALLION_LENGTH
+            ? gallionModelInfo
+            : defaultModelInfo
+      }
       segment={segment}
       half={half}
       cellSize={cellSize}

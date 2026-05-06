@@ -9,6 +9,20 @@ const INITIAL_LOBBY_STATE = Object.freeze({
   players: 0,
   maxPlayers: 0,
   playerNumber: 1,
+  opponentPresence: {
+    disconnected: false,
+    disconnectedPlayerNumber: null,
+    forfeitDeadlineAt: null,
+    lastEvent: null,
+  },
+  lobbyConfigPreview: {
+    boardSize: 10,
+    playerCount: 2,
+    humanPlayers: 2,
+    aiPlayers: 0,
+    fleetShipCount: 5,
+    fleetTotalCells: 17,
+  },
 })
 
 function applyGameCreated(message, fallbackPlayerCount) {
@@ -19,6 +33,8 @@ function applyGameCreated(message, fallbackPlayerCount) {
     players: message.players ?? 1,
     maxPlayers: message.maxPlayers ?? fallbackPlayerCount,
     playerNumber: message.playerNumber ?? 1,
+    opponentPresence: INITIAL_LOBBY_STATE.opponentPresence,
+    lobbyConfigPreview: INITIAL_LOBBY_STATE.lobbyConfigPreview,
   }
 }
 
@@ -30,6 +46,8 @@ function applyJoinedGame(message, fallbackPlayerCount) {
     players: message.players ?? 1,
     maxPlayers: message.maxPlayers ?? fallbackPlayerCount,
     playerNumber: message.playerNumber ?? 1,
+    opponentPresence: INITIAL_LOBBY_STATE.opponentPresence,
+    lobbyConfigPreview: INITIAL_LOBBY_STATE.lobbyConfigPreview,
   }
 }
 
@@ -39,6 +57,31 @@ function applyPlayerCountUpdate(current, message) {
     ...current,
     players: message.players ?? current.players,
     maxPlayers: message.maxPlayers ?? current.maxPlayers,
+  }
+}
+
+function updateOpponentPresence(current, nextPatch) {
+  return {
+    ...current,
+    opponentPresence: {
+      ...current.opponentPresence,
+      ...nextPatch,
+    },
+  }
+}
+
+function updateLobbyConfigPreview(current, message) {
+  if (!current.inLobby || current.gameId !== message.gameId) return current
+  return {
+    ...current,
+    lobbyConfigPreview: {
+      boardSize: Number(message.boardSize) || current.lobbyConfigPreview.boardSize,
+      playerCount: Number(message.playerCount) || current.lobbyConfigPreview.playerCount,
+      humanPlayers: Number(message.humanPlayers) || current.lobbyConfigPreview.humanPlayers,
+      aiPlayers: Number(message.aiPlayers) || current.lobbyConfigPreview.aiPlayers,
+      fleetShipCount: Number(message.fleetShipCount) || current.lobbyConfigPreview.fleetShipCount,
+      fleetTotalCells: Number(message.fleetTotalCells) || current.lobbyConfigPreview.fleetTotalCells,
+    },
   }
 }
 
@@ -83,12 +126,38 @@ export default function useLobbyState({
     }
     if (wsMessage.type === 'JOINED_GAME') {
       onStatus?.(`Rejoint la partie. ID: ${wsMessage.gameId}`)
-      setLobbyState(applyJoinedGame(wsMessage, fallbackPlayerCount))
+      const nextLobby = applyJoinedGame(wsMessage, fallbackPlayerCount)
+      setLobbyState(nextLobby)
+      const shouldEnterGameNow =
+        wsMessage.gameStatus === 'IN_PROGRESS' || wsMessage.gameStatus === 'FINISHED'
+      if (shouldEnterGameNow) {
+        const lobbyScope = nextLobby.gameId ?? null
+        const playerNumber = nextLobby.playerNumber ?? 1
+        refreshStateAction(playerNumber, lobbyScope)
+          .then((state) => {
+            const status =
+              wsMessage.gameStatus === 'FINISHED'
+                ? (wsMessage.playerResult === 'VICTORY'
+                    ? 'Partie terminee: victoire. Reconnexion en lecture de fin de partie.'
+                    : 'Partie terminee: defaite. Reconnexion en lecture de fin de partie.')
+                : 'Partie en cours. Reconnexion automatique reussie.'
+            enterGameScreenWithState(state, status)
+          })
+          .catch(() => {
+            onStatus?.('Lobby rejoint, mais impossible de synchroniser l etat de la partie. Reessayez dans quelques secondes.')
+          })
+      } else if (wsMessage.joinIntent === 'auto_resume') {
+        onStatus?.('Lobby retrouve. En attente du lancement par l hote.')
+      }
       return
     }
     if (wsMessage.type === 'PLAYER_COUNT_UPDATED') {
       setLobbyState((current) => applyPlayerCountUpdate(current, wsMessage))
       onStatus?.(`Lobby ${wsMessage.gameId}: ${wsMessage.players}/${wsMessage.maxPlayers} joueurs.`)
+      return
+    }
+    if (wsMessage.type === 'LOBBY_CONFIG_UPDATED') {
+      setLobbyState((current) => updateLobbyConfigPreview(current, wsMessage))
       return
     }
     if (wsMessage.type === 'GAME_STARTED') {
@@ -119,6 +188,53 @@ export default function useLobbyState({
     }
     if (wsMessage.type === 'ERROR') {
       onStatus?.(`Erreur WebSocket: ${wsMessage.message}`)
+      return
+    }
+    if (wsMessage.type === 'PLAYER_DISCONNECTED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        if (Number(wsMessage.playerNumber) === Number(current.playerNumber)) return current
+        return updateOpponentPresence(current, {
+          disconnected: true,
+          disconnectedPlayerNumber: wsMessage.playerNumber ?? null,
+          forfeitDeadlineAt: wsMessage.forfeitDeadlineAt ?? null,
+          lastEvent: 'disconnected',
+        })
+      })
+      onStatus?.('Adversaire deconnecte. En attente de reconnexion...')
+      return
+    }
+    if (wsMessage.type === 'PLAYER_RECONNECTED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        if (Number(wsMessage.playerNumber) === Number(current.playerNumber)) return current
+        return updateOpponentPresence(current, {
+          disconnected: false,
+          disconnectedPlayerNumber: null,
+          forfeitDeadlineAt: null,
+          lastEvent: 'reconnected',
+        })
+      })
+      onStatus?.('Adversaire reconnecte.')
+      return
+    }
+    if (wsMessage.type === 'PLAYER_FORFEITED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        return updateOpponentPresence(current, {
+          disconnected: false,
+          disconnectedPlayerNumber: null,
+          forfeitDeadlineAt: null,
+          lastEvent: 'forfeited',
+        })
+      })
+      onStatus?.(`Joueur ${wsMessage.playerNumber} forfait. Partie terminee.`)
+      return
+    }
+    if (wsMessage.type === 'LEFT_GAME') {
+      if (wsMessage.ok) {
+        setLobbyState(INITIAL_LOBBY_STATE)
+      }
     }
   }, [wsMessage, fallbackPlayerCount, refreshStateAction, syncStateAction, enterGameScreenWithState, screen, onStatus])
 
