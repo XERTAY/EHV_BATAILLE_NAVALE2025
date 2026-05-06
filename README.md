@@ -78,6 +78,7 @@ make run
 ## Lancer backend et frontend en local (tests)
 
 ### Prerequis
+
 - Java 17+
 - Maven 3.9+
 - Node.js 20+ et npm
@@ -106,6 +107,7 @@ npm run dev
 Le frontend demarre en local sur `http://localhost:2462`.
 
 ### 3) Tests locaux
+
 - Garder les deux serveurs demarres (backend + frontend)
 - Ouvrir l'URL du frontend dans le navigateur
 - Verifier les appels au backend depuis l'interface (DevTools > Network)
