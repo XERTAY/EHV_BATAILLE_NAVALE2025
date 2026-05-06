@@ -1,20 +1,29 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 
-function HoveredCellHighlight({ hoveredCell, cellSize }) {
-  const boxSize = cellSize * 0.86
-  const depth = cellSize * 0.36
+const BOX_SIZE_FACTOR = 0.86
+const DEPTH_FACTOR = 0.36
+const FLOAT_OFFSET = 0.25
+const FLOAT_HEIGHT = 0.18
 
-  const edgeGeometry = useMemo(() => {
-    return new THREE.EdgesGeometry(new THREE.BoxGeometry(boxSize, boxSize, depth))
-  }, [boxSize, depth])
+/**
+ * Surbrillance flottante de la cellule survolee : box translucide + arretes.
+ */
+export default function HoveredCellHighlight({ hoveredCell, cellSize }) {
+  const boxSize = cellSize * BOX_SIZE_FACTOR
+  const depth = cellSize * DEPTH_FACTOR
+
+  const edgeGeometry = useMemo(
+    () => new THREE.EdgesGeometry(new THREE.BoxGeometry(boxSize, boxSize, depth)),
+    [boxSize, depth],
+  )
 
   return (
     <group
       position={[
         hoveredCell.centerX,
         hoveredCell.centerY,
-        cellSize * 0.18 + 0.25,
+        cellSize * FLOAT_HEIGHT + FLOAT_OFFSET,
       ]}
     >
       <mesh>
@@ -34,5 +43,3 @@ function HoveredCellHighlight({ hoveredCell, cellSize }) {
     </group>
   )
 }
-
-export default HoveredCellHighlight

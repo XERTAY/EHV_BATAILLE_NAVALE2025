@@ -1,12 +1,11 @@
-import { Suspense } from 'react'
 import { Environment, Sky } from '@react-three/drei'
+import { Suspense } from 'react'
 
-/** Direction du soleil (ciel + lumière directionnelle alignées). */
 const SUN_POSITION = [140, 95, 120]
 
 /**
- * Ciel procédural + IBL type studio pour éclairer correctement les matériaux FBX,
- * avec un soleil directionnel cohérent avec le Sky.
+ * Ciel procedural + IBL type studio pour eclairer les materiaux FBX,
+ * avec un soleil directionnel coherent avec le Sky.
  */
 export default function SceneEnvironment() {
   return (

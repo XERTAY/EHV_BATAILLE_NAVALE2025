@@ -1,12 +1,16 @@
-import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useMemo, useRef } from 'react'
+
 import {
-  createWaterUniforms,
   WATER_FRAGMENT_SHADER,
   WATER_VERTEX_SHADER,
-} from '../shaders/waterShader'
+  createWaterUniforms,
+} from '@/shaders/waterShader'
 
-function WaterShaderMaterial() {
+/**
+ * Materiau d'eau anime cote GPU (vertex + fragment shaders custom).
+ */
+export default function WaterShaderMaterial() {
   const materialRef = useRef(null)
   const uniforms = useMemo(() => createWaterUniforms(), [])
 
@@ -25,5 +29,3 @@ function WaterShaderMaterial() {
     />
   )
 }
-
-export default WaterShaderMaterial
