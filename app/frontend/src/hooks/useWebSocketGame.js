@@ -3,7 +3,13 @@ import { getLobbyResumeToken, setLobbyResumeToken } from '@/features/lobby/lobby
 import wsClient from '../api/wsClient'
 
 function useWebSocketGame() {
-  const [wsState, setWsState] = useState({ connected: false, sessionId: null, gameId: null, error: null })
+  const [wsState, setWsState] = useState({
+    connected: false,
+    sessionId: null,
+    gameId: null,
+    playerNumber: 1,
+    error: null,
+  })
   const [wsMessage, setWsMessage] = useState(null)
   const [pendingJoinIntent, setPendingJoinIntent] = useState('manual')
 
@@ -21,11 +27,11 @@ function useWebSocketGame() {
       if (msg.type === 'CONNECTED') setWsState((s) => ({ ...s, sessionId: msg.sessionId }))
       if (msg.type === 'GAME_CREATED') {
         if (msg.gameId && msg.resumeToken) setLobbyResumeToken(msg.gameId, msg.resumeToken)
-        setWsState((s) => ({ ...s, gameId: msg.gameId }))
+        setWsState((s) => ({ ...s, gameId: msg.gameId, playerNumber: msg.playerNumber ?? 1 }))
       }
       if (msg.type === 'JOINED_GAME') {
         if (msg.gameId && msg.resumeToken) setLobbyResumeToken(msg.gameId, msg.resumeToken)
-        setWsState((s) => ({ ...s, gameId: msg.gameId }))
+        setWsState((s) => ({ ...s, gameId: msg.gameId, playerNumber: msg.playerNumber ?? 1 }))
         setPendingJoinIntent('manual')
       }
     }

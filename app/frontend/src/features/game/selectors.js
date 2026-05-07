@@ -38,14 +38,27 @@ export function getCurrentIsAi({ gameState, currentPlayer }) {
  * les `delayedOwnBoardCells` (animations d'impacts adverses) sur le board
  * detenu par le joueur local.
  */
-export function getBoardStatesById({ gameState, delayedOwnBoardCells }) {
+function sanitizeCellsForViewer({ cells, ownBoard, gamePhase }) {
+  if (!Array.isArray(cells)) return cells
+  if (ownBoard || gamePhase === PHASE_GAME_OVER) return cells
+  return cells.map((row) => (
+    Array.isArray(row) ? row.map((cell) => (cell === 'SHIP' ? 'EMPTY' : cell)) : row
+  ))
+}
+
+export function getBoardStatesById({ gameState, delayedOwnBoardCells, gamePhase }) {
   const stateById = {}
   if (!gameState?.boards) return stateById
   for (const board of gameState.boards) {
+    const sanitizedCells = sanitizeCellsForViewer({
+      cells: board.cells,
+      ownBoard: Boolean(board.ownBoard),
+      gamePhase,
+    })
     if (board.ownBoard && delayedOwnBoardCells) {
       stateById[board.boardId] = { ...board, cells: delayedOwnBoardCells }
     } else {
-      stateById[board.boardId] = board
+      stateById[board.boardId] = { ...board, cells: sanitizedCells }
     }
   }
   return stateById
@@ -145,6 +158,9 @@ export function getInteractiveBoards(params) {
     expectedOwnBoardId,
     shouldOfferShootMode,
     shootModeActive,
+    battleSubState,
+    currentTargetPlayer,
+    selectedTargetBoardId,
     boards,
     numPlayersInState,
     localPlayerNumber,
@@ -157,10 +173,21 @@ export function getInteractiveBoards(params) {
     return { [expectedOwnBoardId]: true }
   }
   if (gamePhase !== PHASE_BATTLE) return {}
-  if (shouldOfferShootMode && !shootModeActive) return {}
+  const isFourPlayerBattle = numPlayersInState > 2
+  if (!isFourPlayerBattle && shouldOfferShootMode && !shootModeActive) return {}
   const alive = gameState.playersAlive
   const limit = Math.min(numPlayersInState, boards.length)
   const next = {}
+  if (isFourPlayerBattle && battleSubState === 'firing') {
+    const boardIdFromState = currentTargetPlayer ? boards[currentTargetPlayer - 1]?.boardId : null
+    const boardId = boardIdFromState ?? selectedTargetBoardId
+    if (!boardId) return next
+    const boardIndex = boards.findIndex((board) => board.boardId === boardId)
+    if (boardIndex < 0) return next
+    const isAlive = !alive || alive[boardIndex] !== false
+    if (isAlive) next[boardId] = true
+    return next
+  }
   for (let i = 0; i < limit; i += 1) {
     const boardId = boards[i]?.boardId
     if (isBattleInteractiveBoardId({ boardIndex: i, boardId, alive, localPlayerNumber })) {
@@ -183,8 +210,12 @@ export function getLobbyPartLabel(lobbyState) {
 }
 
 /** Vrai si le mode tir doit etre propose au joueur local. */
-export function getShouldOfferShootMode({ gamePhase, isLocalTurn, currentIsAi, isGameOver }) {
-  return gamePhase === PHASE_BATTLE && isLocalTurn && !currentIsAi && !isGameOver
+export function getShouldOfferShootMode({ gamePhase, isLocalTurn, currentIsAi, isGameOver, numPlayersInState }) {
+  return gamePhase === PHASE_BATTLE
+    && isLocalTurn
+    && !currentIsAi
+    && !isGameOver
+    && numPlayersInState <= 2
 }
 
 /** Vrai si le joueur local est en train de viser (mode tir actif). */

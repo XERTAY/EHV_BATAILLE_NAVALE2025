@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { Vector3 } from 'three'
 
-import { cameraTopDownOverBoard, inferDirectionFromBoard, inferDirectionFromOffset } from './cameraMath'
+import { cameraTopDownOverBoard, cameraTopDownOverview, inferDirectionFromBoard, inferDirectionFromOffset } from './cameraMath'
 import { savePreset } from './cameraPresetStorage'
 import { bezierAt, computeArcMidpoints, easeTransition, isOffsetSignificant } from './cameraTransitions'
 
@@ -71,7 +71,10 @@ export default function CameraDirector({
   focusZ,
   battleView,
   cameraDirection,
+  focusDirection,
   cameraStateKey,
+  boards,
+  targetSelectionView,
   onCameraDirectionChange,
 }) {
   const { camera } = useThree()
@@ -79,13 +82,23 @@ export default function CameraDirector({
   const previousBattleRef = useRef(battleView)
   const initializedRef = useRef(false)
   const previousDirectionRef = useRef(null)
+  const previousTargetSelectionViewRef = useRef(targetSelectionView)
 
   useEffect(() => {
-    const targetLookAt = new Vector3(focusX, 0, focusZ)
-    const effectiveDirection = battleView
-      ? inferDirectionFromBoard({ focusBoard, focusX, focusZ })
-      : cameraDirection
-    const [px, py, pz] = cameraTopDownOverBoard(focusX, focusZ, effectiveDirection)
+    const overviewPosition = cameraTopDownOverview(boards)
+    const [overviewX, overviewY, overviewZ] = overviewPosition
+    const targetLookAt = targetSelectionView
+      ? new Vector3(overviewX, 0, overviewZ)
+      : new Vector3(focusX, 0, focusZ)
+    const effectiveDirection = targetSelectionView
+      ? cameraDirection
+      : (battleView
+        ? (focusDirection ?? inferDirectionFromBoard({ focusBoard, focusX, focusZ }))
+        : cameraDirection)
+    const [selectionX, , selectionZ] = cameraTopDownOverBoard(overviewX, overviewZ, effectiveDirection)
+    const [px, py, pz] = targetSelectionView
+      ? [selectionX, overviewY, selectionZ]
+      : cameraTopDownOverBoard(focusX, focusZ, effectiveDirection)
     const nextPosition = new Vector3(px, py, pz)
     const controls = controlsRef.current
 
@@ -96,7 +109,8 @@ export default function CameraDirector({
       savePreset({ camera, controls, key: cameraStateKey })
     }
 
-    const useArc = (goingIntoBattle || goingOutOfBattle) && initializedRef.current
+    const selectionViewChanged = targetSelectionView !== previousTargetSelectionViewRef.current
+    const useArc = ((goingIntoBattle || goingOutOfBattle) && initializedRef.current) || selectionViewChanged
     const arcSideMultiplier = goingIntoBattle ? -1 : 1
     const arc = useArc
       ? computeArcMidpoints({
@@ -134,7 +148,8 @@ export default function CameraDirector({
 
     initializedRef.current = true
     previousBattleRef.current = battleView
-  }, [camera, controlsRef, focusBoard, focusX, focusZ, battleView, cameraDirection, cameraStateKey])
+    previousTargetSelectionViewRef.current = targetSelectionView
+  }, [camera, controlsRef, focusBoard, focusX, focusZ, battleView, cameraDirection, focusDirection, cameraStateKey, boards, targetSelectionView])
 
   useFrame((_, delta) => {
     const transition = transitionRef.current

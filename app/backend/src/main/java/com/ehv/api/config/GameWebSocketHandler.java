@@ -3,9 +3,11 @@ package com.ehv.api.config;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
@@ -293,6 +295,54 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             ));
         } catch (Exception ignored) {
             // Lobby vide ou sockets fermees : pas bloquant pour HTTP.
+        }
+    }
+
+    public void notifyLobbyGameplayEvent(String lobbyId, Map<String, Object> payload) {
+        if (lobbyId == null || lobbyId.isBlank() || payload == null || payload.isEmpty()) {
+            return;
+        }
+        String id = lobbyId.strip();
+        GameSessionManager.GameSession session = sessionManager.getGame(id);
+        if (session == null) {
+            return;
+        }
+        try {
+            Map<String, Object> event = new HashMap<>(payload);
+            event.putIfAbsent("gameId", id);
+            broadcastToGame(session, event);
+        } catch (Exception ignored) {
+            // Non bloquant : la synchro d'etat HTTP prendra le relais.
+        }
+    }
+
+    public void notifyLobbyGameplayEventForPlayers(String lobbyId, Map<String, Object> payload, Set<Integer> recipients) {
+        if (lobbyId == null || lobbyId.isBlank() || payload == null || payload.isEmpty() || recipients == null || recipients.isEmpty()) {
+            return;
+        }
+        String id = lobbyId.strip();
+        Set<Integer> uniqueRecipients = new HashSet<>(recipients);
+        Map<String, Object> event = new HashMap<>(payload);
+        event.putIfAbsent("gameId", id);
+        CharSequence serialized = gson.toJson(event);
+        for (Integer playerNumber : uniqueRecipients) {
+            if (playerNumber == null || playerNumber <= 0) {
+                continue;
+            }
+            WebSocketSession session = sessionManager.getSessionForPlayer(id, playerNumber);
+            if (session == null || !session.isOpen()) {
+                continue;
+            }
+            try {
+                session.sendMessage(new TextMessage(serialized));
+            } catch (IOException ignored) {
+                sessionManager.leaveGame(session);
+                try {
+                    session.close(CloseStatus.SERVER_ERROR);
+                } catch (IOException ignoredClose) {
+                    // Ignore close failure: the socket is already broken.
+                }
+            }
         }
     }
 

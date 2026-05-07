@@ -25,8 +25,8 @@ export const FACE_OFF_CAMERA_DIRECTION_BY_PLAYER = Object.freeze({
 export const STAR4_CAMERA_DIRECTION_BY_PLAYER = Object.freeze({
   1: 'WEST',
   2: 'EAST',
-  3: 'SOUTH',
-  4: 'NORTH',
+  3: 'NORTH',
+  4: 'SOUTH',
 })
 
 /**

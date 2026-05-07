@@ -1,5 +1,6 @@
 const TOP_DOWN_ALTITUDE = 230
 const TOP_DOWN_OFFSET = 1.2
+const OVERVIEW_ALTITUDE_PADDING = 260
 
 /**
  * Position de camera "top-down" au-dessus d'un plateau, decalee selon la
@@ -40,4 +41,24 @@ export function inferDirectionFromOffset({ dx, dz }) {
     return dx >= 0 ? 'EAST' : 'WEST'
   }
   return dz >= 0 ? 'SOUTH' : 'NORTH'
+}
+
+export function cameraTopDownOverview(boards = []) {
+  if (!Array.isArray(boards) || boards.length === 0) return [0, TOP_DOWN_ALTITUDE + 140, 0]
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const board of boards) {
+    const x = board?.position?.[0] ?? 0
+    const z = board?.position?.[2] ?? 0
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minZ = Math.min(minZ, z)
+    maxZ = Math.max(maxZ, z)
+  }
+  const centerX = (minX + maxX) / 2
+  const centerZ = (minZ + maxZ) / 2
+  const spread = Math.max(maxX - minX, maxZ - minZ)
+  return [centerX, OVERVIEW_ALTITUDE_PADDING + spread * 0.9, centerZ]
 }

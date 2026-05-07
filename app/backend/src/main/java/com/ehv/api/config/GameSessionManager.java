@@ -103,6 +103,22 @@ public class GameSessionManager {
         return sessionToPlayer.get(session.getId());
     }
 
+    public boolean isHostPlayer(String gameId, int playerNumber) {
+        GameSession game = getGame(gameId);
+        if (game == null) {
+            return false;
+        }
+        return game.isHostPlayer(playerNumber);
+    }
+
+    public WebSocketSession getSessionForPlayer(String gameId, int playerNumber) {
+        GameSession game = getGame(gameId);
+        if (game == null) {
+            return null;
+        }
+        return game.getSessionForPlayer(playerNumber);
+    }
+
     public void recordHeartbeat(WebSocketSession session) {
         if (session == null) {
             return;
@@ -319,6 +335,10 @@ public class GameSessionManager {
             return session != null && hostSessionId.equals(session.getId());
         }
 
+        public boolean isHostPlayer(int playerNumber) {
+            return playerNumber == 1;
+        }
+
         public int getPlayerNumber(WebSocketSession session) {
             if (session == null) {
                 return -1;
@@ -330,6 +350,14 @@ public class GameSessionManager {
                 }
             }
             return -1;
+        }
+
+        public WebSocketSession getSessionForPlayer(int playerNumber) {
+            PlayerSlot slot = slots.get(playerNumber);
+            if (slot == null || !slot.connected || slot.session == null || !slot.session.isOpen()) {
+                return null;
+            }
+            return slot.session;
         }
 
         private void collectPresenceEvents(long now, List<PresenceEvent> events) {

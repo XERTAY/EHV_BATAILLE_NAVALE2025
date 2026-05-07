@@ -14,6 +14,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.ehv.api.dto.FireRequest;
 import com.ehv.api.dto.PlaceShipRequest;
 import com.ehv.api.dto.ConfirmPlacementRequest;
@@ -33,12 +36,12 @@ import com.ehv.battleship.model.GameState;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.Ship;
 import com.ehv.battleship.model.ShipOrientation;
-import com.ehv.battleship.model.ShootDecision;
 import com.ehv.battleship.model.ShotResult;
 
 public final class DuelGameService {
 
     private static final int MAX_AUTOMATIC_AI_STEPS = 3000;
+    private static final Logger LOG = LoggerFactory.getLogger(DuelGameService.class);
 
     private final Random random = new Random();
     private Game game;
@@ -51,6 +54,7 @@ public final class DuelGameService {
     private DuelPhase phase;
     private int currentPlayer;
     private Integer winner;
+    private final Map<Integer, Integer> lockedTargetByPlayer = new LinkedHashMap<>();
     private final Map<Integer, Set<String>> placedShipsByPlayer = new LinkedHashMap<>();
     private final List<Integer> placementCompletionOrder = new ArrayList<>();
     private final Map<Integer, Boolean> placementLockedByPlayer = new LinkedHashMap<>();
@@ -103,7 +107,7 @@ public final class DuelGameService {
         placedShipsByPlayer.get(request.player()).add(shipType);
         currentPlayer = request.player();
         advanceUntilHumanOrTerminal();
-        return buildActionResponse(ActionResult.PLACED, request.player());
+        return buildActionResponse(ActionResult.PLACED, request.player(), null, null, null, null);
     }
 
     public synchronized ActionResponse removePlacedShip(RemoveShipRequest request) {
@@ -115,7 +119,7 @@ public final class DuelGameService {
         removeShipFromBoard(request.player(), shipType);
         currentPlayer = request.player();
         advanceUntilHumanOrTerminal();
-        return buildActionResponse(ActionResult.REMOVED, request.player());
+        return buildActionResponse(ActionResult.REMOVED, request.player(), null, null, null, null);
     }
 
     public synchronized ActionResponse confirmPlacement(ConfirmPlacementRequest request) {
@@ -126,19 +130,16 @@ public final class DuelGameService {
         }
         confirmPlacementForPlayer(request.player());
         advanceUntilHumanOrTerminal();
-        return buildActionResponse(ActionResult.CONFIRMED, request.player());
+        return buildActionResponse(ActionResult.CONFIRMED, request.player(), null, null, null, null);
     }
 
     public synchronized ActionResponse fireAt(FireRequest request) {
         validateFireRequest(request);
-        Player shooter = getPlayerById(request.player());
-        int targetNumber = resolveTargetPlayer(request);
-        Player targetPlayer = getPlayerById(targetNumber);
-        Coordinate target = new Coordinate(request.x(), request.y());
-        ShotResult shotResult = game.shoot(shooter, targetPlayer, target);
-        updateStateAfterShot(shotResult);
-        advanceUntilHumanOrTerminal();
-        return buildActionResponse(actionResultFromShot(shotResult), request.player());
+        int shooterNumber = request.player();
+        int targetNumber = selectTarget(shooterNumber, request.targetPlayer(), false);
+        Coordinate coordinate = selectShotCoordinate(shooterNumber, targetNumber, request.x(), request.y(), false);
+        ActionResult result = executeShot(shooterNumber, targetNumber, coordinate, false);
+        return buildActionResponse(result, shooterNumber, shooterNumber, targetNumber, coordinate.getX(), coordinate.getY());
     }
 
     public synchronized GameStateResponse advanceAiSingleStepAndGetState() {
@@ -157,13 +158,32 @@ public final class DuelGameService {
             currentPlayer = nextLivingPlayerCircular(currentPlayer);
             return getStateForPlayer(viewSlotForClients());
         }
-        AI ai = (AI) current;
-        ShootDecision decision = ai.chooseShootingTarget(game, currentPlayer);
-        Player defender = getPlayerById(decision.defenderNumber());
-        ShotResult result = game.shoot(ai, defender, decision.coordinate());
-        ai.handleShotResult(decision.defenderNumber(), decision.coordinate(), result);
-        updateStateAfterShot(result);
-        return getStateForPlayer(viewSlotForClients());
+        ActionResponse action = performAiBattleShot(currentPlayer);
+        return action.state();
+    }
+
+    public synchronized ActionResponse advanceAiSingleStepAndGetAction() {
+        LOG.info("[AI] STEP_REQUEST phase={} currentPlayer={} playerCount={}", phase, currentPlayer, playerCount);
+        if (phase == DuelPhase.GAME_OVER || game.isFinished()) {
+            LOG.info("[AI] STEP_SKIPPED reason=GAME_OVER");
+            return buildActionResponse(ActionResult.MISS, viewSlotForClients(), null, null, null, null);
+        }
+        if (isHumanSlot(currentPlayer)) {
+            LOG.info("[AI] STEP_SKIPPED reason=HUMAN_TURN currentPlayer={}", currentPlayer);
+            return buildActionResponse(ActionResult.MISS, viewSlotForClients(), null, null, null, null);
+        }
+        if (phase != DuelPhase.BATTLE) {
+            LOG.info("[AI] STEP_SKIPPED reason=NOT_BATTLE phase={}", phase);
+            return buildActionResponse(ActionResult.MISS, viewSlotForClients(), null, null, null, null);
+        }
+
+        Player current = getPlayerById(currentPlayer);
+        if (current.hasLost()) {
+            LOG.info("[AI] STEP_SKIP_LOST_PLAYER currentPlayer={} next={}", currentPlayer, nextLivingPlayerCircular(currentPlayer));
+            currentPlayer = nextLivingPlayerCircular(currentPlayer);
+            return buildActionResponse(ActionResult.MISS, viewSlotForClients(), null, null, null, null);
+        }
+        return performAiBattleShot(currentPlayer);
     }
 
     public synchronized GameStateResponse getStateForPlayer(int player) {
@@ -179,12 +199,13 @@ public final class DuelGameService {
             boardSize,
             phase,
             currentPlayer,
+            getCurrentTargetPlayer(),
             winner,
             boards,
             computePlayersAlive(),
             computeAiPlayers(),
             computePlacementLocked(),
-            computePlacedShipTypesByPlayer()
+            computePlacedShipTypesByPlayer(player)
         );
     }
 
@@ -317,6 +338,7 @@ public final class DuelGameService {
         for (int i = 1; i <= playerCount; i++) {
             placedShipsByPlayer.put(i, new HashSet<>());
             placementLockedByPlayer.put(i, false);
+            lockedTargetByPlayer.put(i, null);
         }
         advanceUntilHumanOrTerminal();
     }
@@ -369,6 +391,7 @@ public final class DuelGameService {
         for (int p = 1; p <= playerCount; p++) {
             placedShipsByPlayer.put(p, collectPlacedShipTypes(p));
             placementLockedByPlayer.put(p, game.getPlayers().get(p - 1).isReady());
+            lockedTargetByPlayer.put(p, null);
         }
     }
 
@@ -396,9 +419,13 @@ public final class DuelGameService {
         return List.copyOf(locked);
     }
 
-    private List<List<String>> computePlacedShipTypesByPlayer() {
+    private List<List<String>> computePlacedShipTypesByPlayer(int viewerPlayer) {
         List<List<String>> placed = new ArrayList<>(playerCount);
         for (int p = 1; p <= playerCount; p++) {
+            if (p != viewerPlayer) {
+                placed.add(List.of());
+                continue;
+            }
             List<String> shipTypes = new ArrayList<>(placedShipsByPlayer.getOrDefault(p, Set.of()));
             shipTypes.sort(String::compareTo);
             placed.add(List.copyOf(shipTypes));
@@ -590,43 +617,172 @@ public final class DuelGameService {
     }
 
     private int resolveTargetPlayer(FireRequest request) {
-        Integer requested = request.targetPlayer();
-        if (playerCount == 2) {
-            if (requested == null) {
-                return duelOpponent(request.player());
+        return resolveTargetPlayerForCurrentShooter(request.player(), request.targetPlayer(), false);
+    }
+
+    private int selectTarget(int shooterNumber, Integer requestedTarget, boolean allowRandomForAi) {
+        int selected = resolveTargetPlayerForCurrentShooter(shooterNumber, requestedTarget, allowRandomForAi);
+        if (isAiShooter(shooterNumber) && playerCount > 2) {
+            LOG.info("[AI] TARGET_SELECTED shooter={} requested={} selected={} allowRandom={} locked={}",
+                shooterNumber, requestedTarget, selected, allowRandomForAi, lockedTargetByPlayer.get(shooterNumber));
+        }
+        return selected;
+    }
+
+    private Coordinate selectShotCoordinate(
+            int shooterNumber,
+            int targetNumber,
+            Integer requestedX,
+            Integer requestedY,
+            boolean isAiShot) {
+        if (isAiShot) {
+            AI ai = (AI) getPlayerById(shooterNumber);
+            Coordinate chosen = ai.chooseTargetForDefender(targetNumber);
+            if (playerCount > 2) {
+                LOG.info("[AI] CELL_SELECTED shooter={} target={} x={} y={}",
+                    shooterNumber, targetNumber, chosen.getX(), chosen.getY());
             }
-            validatePlayer(requested);
-            if (requested == request.player()) {
+            return chosen;
+        }
+        if (requestedX == null || requestedY == null) {
+            throw new IllegalArgumentException("Coordonnees de tir manquantes");
+        }
+        return new Coordinate(requestedX, requestedY);
+    }
+
+    private ActionResult executeShot(int shooterNumber, int targetNumber, Coordinate coordinate, boolean isAiShot) {
+        Player shooter = getPlayerById(shooterNumber);
+        Player targetPlayer = getPlayerById(targetNumber);
+        ShotResult shotResult = game.shoot(shooter, targetPlayer, coordinate);
+        if (isAiShot && playerCount > 2) {
+            LOG.info("[AI] SHOT_RESOLVED shooter={} target={} x={} y={} result={}",
+                shooterNumber, targetNumber, coordinate.getX(), coordinate.getY(), shotResult);
+        }
+        if (isAiShot) {
+            AI ai = (AI) shooter;
+            ai.handleShotResult(targetNumber, coordinate, shotResult);
+        }
+        updateStateAfterShot(shotResult);
+        advanceUntilHumanOrTerminal();
+        return actionResultFromShot(shotResult);
+    }
+
+    private ActionResponse performAiBattleShot(int shooterNumber) {
+        if (playerCount > 2) {
+            LOG.info("[AI] TURN_START shooter={} lockedTarget={} currentPlayer={}",
+                shooterNumber, lockedTargetByPlayer.get(shooterNumber), currentPlayer);
+        }
+        int targetNumber = selectTarget(shooterNumber, null, true);
+        Coordinate coordinate = selectShotCoordinate(shooterNumber, targetNumber, null, null, true);
+        ActionResult result = executeShot(shooterNumber, targetNumber, coordinate, true);
+        if (playerCount > 2) {
+            LOG.info("[AI] TURN_END shooter={} nextPlayer={} currentTarget={} result={}",
+                shooterNumber, currentPlayer, getCurrentTargetPlayer(), result);
+        }
+        return buildActionResponse(result, viewSlotForClients(), shooterNumber, targetNumber, coordinate.getX(), coordinate.getY());
+    }
+
+    private int resolveTargetPlayerForCurrentShooter(int shooterNumber, Integer requestedTarget, boolean allowRandomWhenMissing) {
+        Integer lockedTarget = lockedTargetByPlayer.get(shooterNumber);
+        if (playerCount == 2) {
+            if (requestedTarget == null) {
+                return duelOpponent(shooterNumber);
+            }
+            validatePlayer(requestedTarget);
+            if (requestedTarget == shooterNumber) {
                 throw new IllegalArgumentException("Impossible de se tirer dessus");
             }
-            int expected = duelOpponent(request.player());
-            if (requested != expected) {
+            int expected = duelOpponent(shooterNumber);
+            if (requestedTarget != expected) {
                 throw new IllegalArgumentException("Cible invalide pour le duel a 2 joueurs");
             }
-            return requested;
+            return requestedTarget;
         }
-        if (requested == null) {
-            throw new IllegalArgumentException("La cible (targetPlayer) est requise pour cette partie");
+        if (requestedTarget == null) {
+            if (lockedTarget != null) {
+                if (getPlayerById(lockedTarget).hasLost()) {
+                    lockedTargetByPlayer.put(shooterNumber, null);
+                } else {
+                    return lockedTarget;
+                }
+            }
+            if (!allowRandomWhenMissing) {
+                throw new IllegalArgumentException("La cible (targetPlayer) est requise pour cette partie");
+            }
+            int randomTarget = pickRandomAliveOpponent(shooterNumber);
+            lockedTargetByPlayer.put(shooterNumber, randomTarget);
+            return randomTarget;
         }
-        validatePlayer(requested);
-        if (requested == request.player()) {
+        validatePlayer(requestedTarget);
+        if (requestedTarget == shooterNumber) {
             throw new IllegalArgumentException("Impossible de se tirer dessus");
         }
-        if (getPlayerById(requested).hasLost()) {
+        if (getPlayerById(requestedTarget).hasLost()) {
             throw new IllegalArgumentException("Ce joueur est elimine");
         }
-        return requested;
+        if (lockedTarget != null) {
+            if (getPlayerById(lockedTarget).hasLost()) {
+                lockedTargetByPlayer.put(shooterNumber, null);
+            } else if (!lockedTarget.equals(requestedTarget)) {
+                throw new IllegalArgumentException("Cible verrouillee: continuez de tirer sur le meme joueur tant que vous touchez.");
+            }
+        }
+        lockedTargetByPlayer.put(shooterNumber, requestedTarget);
+        return requestedTarget;
+    }
+
+    private int pickRandomAliveOpponent(int shooterNumber) {
+        List<Integer> aliveOpponents = new ArrayList<>();
+        for (int p = 1; p <= playerCount; p++) {
+            if (p == shooterNumber) {
+                continue;
+            }
+            if (!getPlayerById(p).hasLost()) {
+                aliveOpponents.add(p);
+            }
+        }
+        if (aliveOpponents.isEmpty()) {
+            throw new IllegalStateException("Aucun adversaire vivant disponible.");
+        }
+        return aliveOpponents.get(random.nextInt(aliveOpponents.size()));
     }
 
     private void updateStateAfterShot(ShotResult shotResult) {
+        int shooterBeforeUpdate = currentPlayer;
         if (game.isFinished()) {
             phase = DuelPhase.GAME_OVER;
             game.setState(GameState.FINISHED);
             Player winningPlayer = game.getWinner();
             winner = winningPlayer != null ? resolvePlayerNumber(winningPlayer) : null;
+            lockedTargetByPlayer.put(currentPlayer, null);
+            if (playerCount > 2 && isAiShooter(shooterBeforeUpdate)) {
+                LOG.info("[AI] STATE_AFTER_SHOT gameOver=true winner={} shooter={}", winner, shooterBeforeUpdate);
+            }
         } else if (shotResult == ShotResult.MISS) {
+            lockedTargetByPlayer.put(currentPlayer, null);
             currentPlayer = nextLivingPlayerCircular(currentPlayer);
+            lockedTargetByPlayer.put(currentPlayer, null);
+            if (playerCount > 2 && isAiShooter(shooterBeforeUpdate)) {
+                LOG.info("[AI] STATE_AFTER_SHOT miss=true shooter={} nextPlayer={} lockReset=true",
+                    shooterBeforeUpdate, currentPlayer);
+            }
+        } else {
+            Integer lockedTarget = lockedTargetByPlayer.get(currentPlayer);
+            if (lockedTarget != null && getPlayerById(lockedTarget).hasLost()) {
+                lockedTargetByPlayer.put(currentPlayer, null);
+                if (playerCount > 2 && isAiShooter(shooterBeforeUpdate)) {
+                    LOG.info("[AI] STATE_AFTER_SHOT targetEliminated shooter={} previousTarget={} lockReset=true",
+                        shooterBeforeUpdate, lockedTarget);
+                }
+            }
         }
+    }
+
+    private boolean isAiShooter(int shooterNumber) {
+        if (shooterNumber < 1 || shooterNumber > playerCount) {
+            return false;
+        }
+        return !isHumanSlot(shooterNumber);
     }
 
     private int nextLivingPlayerCircular(int from) {
@@ -644,6 +800,21 @@ public final class DuelGameService {
         return player == 1 ? 2 : 1;
     }
 
+    private Integer getCurrentTargetPlayer() {
+        if (phase != DuelPhase.BATTLE || playerCount <= 2) {
+            return null;
+        }
+        Integer lockedTarget = lockedTargetByPlayer.get(currentPlayer);
+        if (lockedTarget == null) {
+            return null;
+        }
+        if (getPlayerById(lockedTarget).hasLost()) {
+            lockedTargetByPlayer.put(currentPlayer, null);
+            return null;
+        }
+        return lockedTarget;
+    }
+
     private ActionResult actionResultFromShot(ShotResult shotResult) {
         return switch (shotResult) {
             case MISS -> ActionResult.MISS;
@@ -654,11 +825,15 @@ public final class DuelGameService {
         };
     }
 
-    private ActionResponse buildActionResponse(ActionResult result, int viewerPlayer) {
+    private ActionResponse buildActionResponse(ActionResult result, int viewerPlayer, Integer shooter, Integer targetPlayer, Integer shotX, Integer shotY) {
         return new ActionResponse(
             result,
             actionResultMessage(result),
-            getStateForPlayer(viewerPlayer)
+            getStateForPlayer(viewerPlayer),
+            shooter,
+            targetPlayer,
+            shotX,
+            shotY
         );
     }
 
