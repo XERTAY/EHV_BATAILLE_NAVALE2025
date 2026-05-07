@@ -129,6 +129,12 @@ function GameSetupMenu({
     // Ne pas attendre wsConnected: createGame/join appellent ensureOpen avant send.
     if (menuStep !== 'new' || !shouldShareId) return
     if (!lobby?.inLobby) {
+      if (!wsConnected) {
+        // Autorise une nouvelle tentative des que la socket est de nouveau connectee.
+        createLobbyRequestedRef.current = false
+        ensureWs?.()
+        return
+      }
       if (createLobbyRequestedRef.current) return
       createLobbyRequestedRef.current = true
       onCreateLobby(setup.playerCount)
@@ -140,7 +146,17 @@ function GameSetupMenu({
     if (lobby.isHost && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
       onCreateLobby(setup.playerCount)
     }
-  }, [menuStep, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby])
+  }, [menuStep, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby, wsConnected, ensureWs])
+
+  useEffect(() => {
+    if (menuStep !== 'new' || !shouldShareId || lobby?.inLobby) return undefined
+    if (!createLobbyRequestedRef.current) return undefined
+    // Si aucun GAME_CREATED n'arrive (latence/reseau), on de-verrouille et on retente.
+    const retryId = window.setTimeout(() => {
+      createLobbyRequestedRef.current = false
+    }, 2500)
+    return () => window.clearTimeout(retryId)
+  }, [menuStep, shouldShareId, lobby?.inLobby, wsConnected])
 
   useEffect(() => {
     if (menuStep !== 'new' || !shouldShareId) {
