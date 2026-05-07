@@ -6,6 +6,11 @@ import { ACESFilmicToneMapping, MOUSE, SRGBColorSpace } from 'three'
 import WaterBoard from '@/features/board/WaterBoard'
 import CameraDirector from '@/features/camera/CameraDirector'
 import { cameraTopDownOverBoard } from '@/features/camera/cameraMath'
+import {
+  BOARD_ID_TO_PLAYER,
+  FACE_OFF_CAMERA_DIRECTION_BY_PLAYER,
+  STAR4_CAMERA_DIRECTION_BY_PLAYER,
+} from '@/constants/game'
 
 import PerformanceProbe from './PerformanceProbe'
 import SceneEnvironment from './SceneEnvironment'
@@ -13,8 +18,24 @@ import SceneEnvironment from './SceneEnvironment'
 const DECORATIVE_CAMERA_POSITION = [0, 130, 230]
 const OCEAN_BOARD_POSITION = [0, -1.5, 0]
 
-function selectFocusBoard({ battleView, boards, ownBoard, ownBoardId, interactiveBoards }) {
+function selectFocusBoard({
+  battleView,
+  boards,
+  ownBoard,
+  ownBoardId,
+  interactiveBoards,
+  selectedTargetBoardId,
+  currentTargetPlayer,
+}) {
   if (!battleView) return ownBoard
+  if (selectedTargetBoardId) {
+    const selected = boards.find((board) => board.boardId === selectedTargetBoardId)
+    if (selected) return selected
+  }
+  if (currentTargetPlayer) {
+    const targetBoard = boards[currentTargetPlayer - 1]
+    if (targetBoard?.boardId) return targetBoard
+  }
   const interactiveEnemyBoard = boards.find(
     (board) => board.boardId !== ownBoardId && Boolean(interactiveBoards?.[board.boardId]),
   )
@@ -23,6 +44,13 @@ function selectFocusBoard({ battleView, boards, ownBoard, ownBoardId, interactiv
     return boards.find((board) => board.boardId !== ownBoardId) ?? ownBoard
   }
   return ownBoard
+}
+
+function getDefaultDirectionForBoard(boardId, boardsCount) {
+  const playerNumber = BOARD_ID_TO_PLAYER[boardId]
+  if (!playerNumber) return null
+  if (boardsCount > 2) return STAR4_CAMERA_DIRECTION_BY_PLAYER[playerNumber] ?? null
+  return FACE_OFF_CAMERA_DIRECTION_BY_PLAYER[playerNumber] ?? null
 }
 
 function PlayerBoards({
@@ -35,7 +63,10 @@ function PlayerBoards({
   showCoordinates,
   aiBoardIds,
   interactiveBoards,
+  targetSelectionView,
+  selectedTargetBoardId,
   waveMode,
+  gamePhase,
   onCellHover,
   onCellClick,
 }) {
@@ -60,6 +91,9 @@ function PlayerBoards({
       showTitle
       showAiTag={Boolean(aiBoardIds?.has(board.boardId))}
       interactive={Boolean(interactiveBoards?.[board.boardId])}
+      boardSelectable={targetSelectionView}
+      boardSelected={selectedTargetBoardId === board.boardId}
+      gamePhase={gamePhase}
       waveMode={waveMode}
       onCellHover={onCellHover}
       onCellClick={onCellClick}
@@ -88,16 +122,32 @@ export default function BoardScene({
   waveMode,
   benchmarkEnabled,
   topDownView = false,
+  targetSelectionView = false,
   onCellHover,
   onCellClick,
   onCameraDirectionChange,
+  selectedTargetBoardId = null,
+  currentTargetPlayer = null,
   decorativeOnly = false,
+  gamePhase = null,
 }) {
   const battleView = Boolean(topDownView)
   const ownBoard = boards.find((board) => board.boardId === ownBoardId) ?? boards[0]
   const focusBoard = useMemo(
-    () => selectFocusBoard({ battleView, boards, ownBoard, ownBoardId, interactiveBoards }),
-    [battleView, boards, ownBoard, ownBoardId, interactiveBoards],
+    () => selectFocusBoard({
+      battleView,
+      boards,
+      ownBoard,
+      ownBoardId,
+      interactiveBoards,
+      selectedTargetBoardId,
+      currentTargetPlayer,
+    }),
+    [battleView, boards, ownBoard, ownBoardId, interactiveBoards, selectedTargetBoardId, currentTargetPlayer],
+  )
+  const focusDirection = useMemo(
+    () => getDefaultDirectionForBoard(focusBoard?.boardId, boards.length),
+    [focusBoard?.boardId, boards.length],
   )
   const focusX = focusBoard?.position?.[0] ?? 0
   const focusZ = focusBoard?.position?.[2] ?? 0
@@ -128,7 +178,10 @@ export default function BoardScene({
           focusZ={focusZ}
           battleView={battleView}
           cameraDirection={cameraDirection}
+          focusDirection={focusDirection}
           cameraStateKey={cameraStateKey}
+          boards={boards}
+          targetSelectionView={targetSelectionView}
           onCameraDirectionChange={onCameraDirectionChange}
         />
       )}
@@ -145,6 +198,7 @@ export default function BoardScene({
         showWater
         interactive={false}
         waveMode={waveMode}
+        gamePhase={gamePhase}
       />
       {!decorativeOnly ? (
         <PlayerBoards
@@ -157,7 +211,10 @@ export default function BoardScene({
           showCoordinates={showCoordinates}
           aiBoardIds={aiBoardIds}
           interactiveBoards={interactiveBoards}
+          targetSelectionView={targetSelectionView}
+          selectedTargetBoardId={selectedTargetBoardId}
           waveMode={waveMode}
+          gamePhase={gamePhase}
           onCellHover={onCellHover}
           onCellClick={onCellClick}
         />

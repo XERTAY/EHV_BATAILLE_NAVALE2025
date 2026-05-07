@@ -22,9 +22,11 @@ export default function useBoardPointer({
   onCellClick,
 }) {
   const [hoveredCell, setHoveredCell] = useState(null)
+  const [isBoardHovered, setIsBoardHovered] = useState(false)
 
   const onPointerMove = useCallback((event) => {
     if (!interactive) return
+    setIsBoardHovered(true)
     const cellData = resolveCellFromEvent(event, boardMathOptions)
     const next = { boardId, ...cellData }
     setHoveredCell(next)
@@ -33,6 +35,7 @@ export default function useBoardPointer({
 
   const onPointerOut = useCallback(() => {
     if (!interactive) return
+    setIsBoardHovered(false)
     setHoveredCell(null)
     if (onCellHover) onCellHover(null)
   }, [interactive, onCellHover])
@@ -44,5 +47,5 @@ export default function useBoardPointer({
     onCellClick({ boardId, ...cellData, label: getCellLabel(cellData) })
   }, [interactive, boardMathOptions, boardId, onCellClick])
 
-  return { hoveredCell, onPointerMove, onPointerOut, onPointerDown }
+  return { hoveredCell, isBoardHovered, onPointerMove, onPointerOut, onPointerDown }
 }

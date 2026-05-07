@@ -1,6 +1,7 @@
 package com.ehv.api.security;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -18,23 +19,30 @@ import com.google.gson.JsonParser;
 
 @Component
 public class LobbyJwtService {
-    private static final long TWENTY_FOUR_HOURS_SECONDS = 24L * 60L * 60L;
+    private static final long TOKEN_TTL_SECONDS = 15L * 60L;
     private static final String HMAC_ALG = "HmacSHA256";
+    private static final String DEFAULT_SECRET = "change-this-lobby-jwt-secret";
+    private static final int MIN_SECRET_LENGTH = 32;
     private static final Base64.Encoder URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder URL_DECODER = Base64.getUrlDecoder();
     private static final Gson GSON = new Gson();
 
     private final byte[] signingKeyBytes;
 
-    public LobbyJwtService(@Value("${lobby.jwt.secret:change-this-lobby-jwt-secret}") String signingSecret) {
-        this.signingKeyBytes = signingSecret.getBytes(StandardCharsets.UTF_8);
+    public LobbyJwtService(@Value("${lobby.jwt.secret:}") String signingSecret) {
+        String normalizedSecret = signingSecret == null ? "" : signingSecret.trim();
+        if (normalizedSecret.isEmpty() || DEFAULT_SECRET.equals(normalizedSecret) || normalizedSecret.length() < MIN_SECRET_LENGTH) {
+            throw new IllegalStateException(
+                "Property 'lobby.jwt.secret' must be configured with at least " + MIN_SECRET_LENGTH + " characters.");
+        }
+        this.signingKeyBytes = normalizedSecret.getBytes(StandardCharsets.UTF_8);
     }
 
     public String issueToken(String gameId, int playerNumber) {
         if (gameId == null || gameId.isBlank() || playerNumber <= 0) {
             throw new IllegalArgumentException("Invalid lobby token payload.");
         }
-        long exp = Instant.now().getEpochSecond() + TWENTY_FOUR_HOURS_SECONDS;
+        long exp = Instant.now().getEpochSecond() + TOKEN_TTL_SECONDS;
         Map<String, Object> header = Map.of("alg", "HS256", "typ", "JWT");
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("gameId", normalize(gameId));
@@ -68,8 +76,14 @@ public class LobbyJwtService {
             return null;
         }
         String signingInput = parts[0] + "." + parts[1];
-        String actualSig = sign(signingInput);
-        if (!actualSig.equals(parts[2])) {
+        byte[] expectedSig = signToBytes(signingInput);
+        byte[] providedSig;
+        try {
+            providedSig = URL_DECODER.decode(parts[2]);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+        if (!MessageDigest.isEqual(expectedSig, providedSig)) {
             return null;
         }
         JsonObject payload;
@@ -96,11 +110,14 @@ public class LobbyJwtService {
     }
 
     private String sign(String input) {
+        return URL_ENCODER.encodeToString(signToBytes(input));
+    }
+
+    private byte[] signToBytes(String input) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALG);
             mac.init(new SecretKeySpec(signingKeyBytes, HMAC_ALG));
-            byte[] digest = mac.doFinal(input.getBytes(StandardCharsets.UTF_8));
-            return URL_ENCODER.encodeToString(digest);
+            return mac.doFinal(input.getBytes(StandardCharsets.UTF_8));
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to sign lobby JWT.", exception);
         }

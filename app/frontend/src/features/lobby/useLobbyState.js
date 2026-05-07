@@ -23,6 +23,12 @@ const INITIAL_LOBBY_STATE = Object.freeze({
     fleetShipCount: 5,
     fleetTotalCells: 17,
   },
+  gameplaySync: {
+    phaseStep: null,
+    shooter: null,
+    targetPlayer: null,
+    shot: null,
+  },
 })
 
 function applyGameCreated(message, fallbackPlayerCount) {
@@ -81,6 +87,16 @@ function updateLobbyConfigPreview(current, message) {
       aiPlayers: Number(message.aiPlayers) || current.lobbyConfigPreview.aiPlayers,
       fleetShipCount: Number(message.fleetShipCount) || current.lobbyConfigPreview.fleetShipCount,
       fleetTotalCells: Number(message.fleetTotalCells) || current.lobbyConfigPreview.fleetTotalCells,
+    },
+  }
+}
+
+function updateGameplaySync(current, patch) {
+  return {
+    ...current,
+    gameplaySync: {
+      ...current.gameplaySync,
+      ...patch,
     },
   }
 }
@@ -183,6 +199,41 @@ export default function useLobbyState({
         }
         syncStateAction(current.playerNumber ?? 1, wsMessage.gameId).catch(() => {})
         return current
+      })
+      return
+    }
+    if (wsMessage.type === 'TARGET_LOCKED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        syncStateAction(current.playerNumber ?? 1, wsMessage.gameId).catch(() => {})
+        return updateGameplaySync(current, {
+          phaseStep: 'firing',
+          shooter: wsMessage.shooter ?? null,
+          targetPlayer: wsMessage.targetPlayer ?? null,
+        })
+      })
+      return
+    }
+    if (wsMessage.type === 'SHOT_RESOLVED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        syncStateAction(current.playerNumber ?? 1, wsMessage.gameId).catch(() => {})
+        return updateGameplaySync(current, {
+          phaseStep: wsMessage.currentTargetPlayer ? 'firing' : 'target_selection',
+          shooter: wsMessage.shooter ?? null,
+          targetPlayer: wsMessage.currentTargetPlayer ?? wsMessage.targetPlayer ?? null,
+          shot: wsMessage.x != null && wsMessage.y != null ? { x: wsMessage.x, y: wsMessage.y } : null,
+        })
+      })
+      return
+    }
+    if (wsMessage.type === 'TURN_PHASE_CHANGED') {
+      setLobbyState((current) => {
+        if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
+        return updateGameplaySync(current, {
+          phaseStep: wsMessage.phaseStep ?? null,
+          targetPlayer: wsMessage.currentTargetPlayer ?? current.gameplaySync.targetPlayer,
+        })
       })
       return
     }
