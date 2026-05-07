@@ -6,7 +6,7 @@ services:
     container_name: bataille-navale-backend
     restart: unless-stopped
     environment:
-      APP_ALLOWED_ORIGINS: "${APP_ALLOWED_ORIGINS:-http://localhost:2462,http://localhost:5173,http://127.0.0.1:2462,http://127.0.0.1:5173,http://72.61.192.139:2462}"
+      APP_ALLOWED_ORIGINS: "${APP_ALLOWED_ORIGINS:-*}"
     expose:
       - "4784"
 
