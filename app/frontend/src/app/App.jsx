@@ -47,8 +47,13 @@ export default function App() {
     const key = `${shooter}:${targetPlayer}:${x}:${y}`
     if (seenActionKeysRef.current.has(key)) return
     seenActionKeysRef.current.add(key)
+    const timestamp = new Date().toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
     setActionFeed((prev) => {
-      const next = [...prev, `Joueur${shooter} -> ${cellLabel} -> Joueur${targetPlayer}`]
+      const next = [...prev, `${timestamp} | Joueur${shooter} -> ${cellLabel} -> Joueur${targetPlayer}`]
       return next.slice(-100)
     })
   }, [])
@@ -244,6 +249,7 @@ export default function App() {
     runAiStepAction: api.runAiStepAction,
     lobbyGameId: lobbyState.gameId,
     lobbyInLobby: lobbyState.inLobby,
+    lobbyIsHost: lobbyState.isHost,
     onStatus: setStatusMessage,
     onAiAction: appendActionFeed,
   })

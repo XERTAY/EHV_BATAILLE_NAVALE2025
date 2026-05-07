@@ -11,7 +11,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class BackendConfig implements WebMvcConfigurer {
     private final String[] allowedOrigins;
 
-    public BackendConfig(@Value("${app.security.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+    public BackendConfig(@Value("${app.security.allowed-origins:http://localhost:2462,http://localhost:5173}") String allowedOrigins) {
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
             .map(String::trim)
             .filter(value -> !value.isEmpty())
