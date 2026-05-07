@@ -4,10 +4,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.regex.Pattern;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 public final class GamePersistence {
+    private static final Pattern SAFE_FILE_NAME = Pattern.compile("^[a-zA-Z0-9._-]{1,64}$");
+    private static final Path SAVES_DIR = Paths.get("saves").toAbsolutePath().normalize();
+
 
     private GamePersistence() {
     }
@@ -25,16 +29,9 @@ public final class GamePersistence {
             throw new IllegalArgumentException("Le nom du fichier ne peut pas être vide");
         }
 
-        // Auto-route: saves/filename.save
-        String filePath = "saves/" + fileName;
-        if (!filePath.endsWith(".save")) {
-            filePath += ".save";
-        }
-        Path path = Paths.get(filePath).toAbsolutePath().normalize();
+        Path path = resolveSafeSavePath(fileName);
         Path parent = path.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
+        Files.createDirectories(parent);
 
         String json = gson.toJson(game);
         Files.write(path, json.getBytes());
@@ -44,11 +41,7 @@ public final class GamePersistence {
         if (fileName == null || fileName.trim().isEmpty()) {
             throw new IllegalArgumentException("Le nom du fichier ne peut pas être vide");
         }
-        String filePath = "saves/" + fileName;
-        if (!filePath.endsWith(".save")) {
-            filePath += ".save";
-        }
-        Path path = Paths.get(filePath).toAbsolutePath().normalize();
+        Path path = resolveSafeSavePath(fileName);
         if (!Files.exists(path)) {
             throw new IOException("Fichier de sauvegarde introuvable : " + path);
         }
@@ -72,5 +65,18 @@ public final class GamePersistence {
         Game.ensureNextIdAtLeast(game.getId() + 1);
         Player.ensureNextIdAtLeast(maxPlayerId + 1);
         Ship.ensureNextIdAtLeast(maxShipId + 1);
+    }
+
+    private static Path resolveSafeSavePath(String fileName) {
+        String trimmed = fileName.trim();
+        if (!SAFE_FILE_NAME.matcher(trimmed).matches()) {
+            throw new IllegalArgumentException("Nom de fichier invalide.");
+        }
+        String normalizedFileName = trimmed.endsWith(".save") ? trimmed : trimmed + ".save";
+        Path path = SAVES_DIR.resolve(normalizedFileName).normalize();
+        if (!path.startsWith(SAVES_DIR)) {
+            throw new IllegalArgumentException("Chemin de sauvegarde invalide.");
+        }
+        return path;
     }
 }

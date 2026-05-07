@@ -28,17 +28,17 @@ export default function HoveredCellHighlight({ hoveredCell, cellSize }) {
     >
       <mesh>
         <boxGeometry args={[boxSize, boxSize, depth]} />
-        <meshStandardMaterial
-          color="#7ef4ff"
-          emissive="#38deff"
-          emissiveIntensity={0.6}
+        <meshBasicMaterial
+          color="#ffffff"
           transparent
-          opacity={0.32}
+          opacity={0.42}
+          toneMapped={false}
+          depthTest={false}
           depthWrite={false}
         />
       </mesh>
       <lineSegments geometry={edgeGeometry}>
-        <lineBasicMaterial color="#cfffff" transparent opacity={0.95} />
+        <lineBasicMaterial color="#ffffff" transparent opacity={1} depthTest={false} toneMapped={false} />
       </lineSegments>
     </group>
   )

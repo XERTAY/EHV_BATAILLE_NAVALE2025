@@ -12,6 +12,24 @@ import {
   saveGame,
 } from '../api/gameApi'
 
+function warnIfEnemyShipLeaked(state) {
+  if (!import.meta.env.DEV || !state?.boards || state.phase === 'GAME_OVER') return
+  const leakedBoard = state.boards.find((board) => (
+    !board?.ownBoard
+    && Array.isArray(board?.cells)
+    && board.cells.some((row) => Array.isArray(row) && row.includes('SHIP'))
+  ))
+  if (leakedBoard) {
+    // Ce warning detecte une fuite backend sans exposer le contenu complet.
+    console.warn('[security] Adversary board contains SHIP outside GAME_OVER', leakedBoard.boardId)
+  }
+}
+
+function applyGameState(setGameState, state) {
+  warnIfEnemyShipLeaked(state)
+  setGameState(state)
+}
+
 export default function useGameApi() {
   const [gameState, setGameState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
@@ -32,7 +50,7 @@ export default function useGameApi() {
         setErrorMessage('')
         await resetGame(boardSize, fleetShipSizes, playerCount, withAI, humanPlayers, lobbyGameId)
         const state = await getGameState(Math.max(1, Number(viewerPlayer) || 1), lobbyGameId)
-        setGameState(state)
+        applyGameState(setGameState, state)
         return state
       } catch (error) {
         setErrorMessage(error.message)
@@ -49,7 +67,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const result = await placeShip(payload)
-      setGameState(result.state)
+      applyGameState(setGameState, result.state)
       return result
     } catch (error) {
       setErrorMessage(error.message)
@@ -64,7 +82,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const result = await fireAt(payload)
-      setGameState(result.state)
+      applyGameState(setGameState, result.state)
       return result
     } catch (error) {
       setErrorMessage(error.message)
@@ -79,7 +97,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const result = await removePlacedShip(payload)
-      setGameState(result.state)
+      applyGameState(setGameState, result.state)
       return result
     } catch (error) {
       setErrorMessage(error.message)
@@ -94,7 +112,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const result = await confirmPlacement(payload)
-      setGameState(result.state)
+      applyGameState(setGameState, result.state)
       return result
     } catch (error) {
       setErrorMessage(error.message)
@@ -120,7 +138,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const state = await loadGame(fileName)
-      setGameState(state)
+      applyGameState(setGameState, state)
       return state
     } catch (error) {
       setErrorMessage(error.message)
@@ -135,7 +153,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const state = await getGameState(player, lobbyGameId)
-      setGameState(state)
+      applyGameState(setGameState, state)
       return state
     } catch (error) {
       setErrorMessage(error.message)
@@ -149,9 +167,9 @@ export default function useGameApi() {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await runAiStep(lobbyGameId)
-      setGameState(state)
-      return state
+      const result = await runAiStep(lobbyGameId)
+      applyGameState(setGameState, result.state)
+      return result
     } catch (error) {
       setErrorMessage(error.message)
       throw error
@@ -162,7 +180,7 @@ export default function useGameApi() {
 
   const syncStateAction = useCallback(async (player = 1, lobbyGameId = null) => {
     const state = await getGameState(player, lobbyGameId)
-    setGameState(state)
+    applyGameState(setGameState, state)
     return state
   }, [])
 
@@ -171,7 +189,7 @@ export default function useGameApi() {
       setLoading(true)
       setErrorMessage('')
       const state = await saveGame(fileName)
-      setGameState(state)
+      applyGameState(setGameState, state)
       return state
     } catch (error) {
       setErrorMessage(error.message)

@@ -17,6 +17,12 @@ const RESET_LOBBY_STATE = Object.freeze({
 })
 
 const LOBBY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const PLAYER_TO_BOARD_ID = Object.freeze({
+  1: 'A1',
+  2: 'B1',
+  3: 'C1',
+  4: 'D1',
+})
 
 function isPlacementAlreadyConfirmedError(error) {
   const message = String(error?.message ?? '').toLowerCase()
@@ -63,6 +69,8 @@ export default function useGameActions({
   placement,
   lobby,
   ws,
+  battle,
+  onBattleAction,
 }) {
   const {
     bootstrapGame,
@@ -110,6 +118,12 @@ export default function useGameActions({
   } = placement
 
   const { lobbyState, setLobbyState } = lobby
+  const {
+    battleSubState,
+    setBattleSubState,
+    selectedTargetBoardId,
+    setSelectedTargetBoardId,
+  } = battle
 
   const handleStartGame = useCallback(async (options = {}) => {
     const keepLobby = Boolean(options.keepLobby)
@@ -214,7 +228,8 @@ export default function useGameActions({
   ])
 
   const sendBattle = useCallback(async ({ boardId, x, y, label }) => {
-    const targetPlayer = BOARD_ID_TO_PLAYER[boardId]
+    const effectiveBoardId = numPlayersInState > 2 ? selectedTargetBoardId : boardId
+    const targetPlayer = BOARD_ID_TO_PLAYER[effectiveBoardId]
     const firePayload = {
       player: localPlayerNumber,
       x,
@@ -223,11 +238,23 @@ export default function useGameActions({
     }
     if (lobbyState.inLobby && lobbyState.gameId) firePayload.gameId = lobbyState.gameId
     const result = await fireAtAction(firePayload)
-    setStatusMessage(buildBattleOutcomeStatus({ result, targetLabel: `${boardId} ${label}` }))
+    if (onBattleAction) onBattleAction(result)
+    if (numPlayersInState > 2) {
+      const nextTarget = result.state.currentTargetPlayer
+      if (nextTarget) {
+        const lockedBoardId = PLAYER_TO_BOARD_ID[nextTarget] ?? effectiveBoardId
+        setSelectedTargetBoardId(lockedBoardId)
+        setBattleSubState('firing')
+      } else {
+        setSelectedTargetBoardId(null)
+        setBattleSubState('target_selection')
+      }
+    }
+    setStatusMessage(buildBattleOutcomeStatus({ result, targetLabel: `${effectiveBoardId} ${label}` }))
     return result
   }, [
     localPlayerNumber, numPlayersInState, lobbyState.inLobby, lobbyState.gameId,
-    fireAtAction, setStatusMessage,
+    selectedTargetBoardId, fireAtAction, onBattleAction, setStatusMessage, setBattleSubState, setSelectedTargetBoardId,
   ])
 
   const handleNonInteractiveBoard = useCallback((boardId) => {
@@ -241,12 +268,17 @@ export default function useGameActions({
     }
     if (gamePhase === PHASE_PLACEMENT) {
       setStatusMessage(`Joueur ${currentPlayer}: placez sur votre grille ${expectedOwnBoardId}.`)
+    } else if (numPlayersInState > 2 && battleSubState === 'target_selection') {
+      setStatusMessage(`Joueur ${currentPlayer}: choisissez une grille adverse pour verrouiller la cible.`)
     } else if (numPlayersInState > 2) {
-      setStatusMessage(`Joueur ${currentPlayer}: choisissez une grille adverse ${boardId} encore en jeu.`)
+      setStatusMessage(`Joueur ${currentPlayer}: cible verrouillee sur ${selectedTargetBoardId ?? 'une grille adverse'}.`)
     } else {
       setStatusMessage(`Joueur ${currentPlayer}: tirez sur la grille adverse.`)
     }
-  }, [currentIsAi, gamePhase, currentPlayer, expectedOwnBoardId, numPlayersInState, setStatusMessage])
+  }, [
+    currentIsAi, gamePhase, currentPlayer, expectedOwnBoardId, numPlayersInState,
+    battleSubState, selectedTargetBoardId, setStatusMessage,
+  ])
 
   // Note importante : conserve le fix de resync `refreshStateAction` quand le
   // client est encore en `PLACEMENT` mais le backend a deja bascule.
@@ -271,6 +303,17 @@ export default function useGameActions({
         }
         await sendPlacement(cell)
       } else if (gamePhase === PHASE_BATTLE) {
+        if (numPlayersInState > 2 && battleSubState === 'target_selection') {
+          const targetPlayer = BOARD_ID_TO_PLAYER[cell.boardId]
+          if (!targetPlayer || targetPlayer === localPlayerNumber) {
+            setStatusMessage('Choisissez une grille adverse encore en jeu.')
+            return
+          }
+          setSelectedTargetBoardId(cell.boardId)
+          setBattleSubState('firing')
+          setStatusMessage(`Cible verrouillee sur ${cell.boardId}. Visez une case pour tirer.`)
+          return
+        }
         await sendBattle(cell)
       }
     } catch {
@@ -279,7 +322,8 @@ export default function useGameActions({
   }, [
     loading, gameState, interactiveBoards, gamePhase, handleNonInteractiveBoard,
     lobbyState.inLobby, lobbyState.gameId, refreshStateAction, localPlayerNumber,
-    sendPlacement, sendBattle, setStatusMessage,
+    sendPlacement, sendBattle, setStatusMessage, numPlayersInState, battleSubState,
+    localPlayerNumber, setBattleSubState, setSelectedTargetBoardId,
   ])
 
   const handleConfirmPlacement = useCallback(async () => {
@@ -369,10 +413,19 @@ export default function useGameActions({
   const handleStartLobbyGame = useCallback(async (setupPatch = {}) => {
     if (!lobbyState.isHost || !lobbyState.gameId) return
     try {
+      const requestedPlayerCount = Number(setupPatch.playerCount ?? setup.playerCount) || 2
+      const clampedPlayerCount = requestedPlayerCount === 4 ? 4 : 2
+      const connectedHumans = Math.max(1, Math.min(Number(lobbyState.players) || 1, clampedPlayerCount))
+      const normalizedLobbyPatch = {
+        ...setupPatch,
+        playerCount: clampedPlayerCount,
+        withAI: connectedHumans < clampedPlayerCount,
+        humanPlayers: connectedHumans < clampedPlayerCount ? connectedHumans : clampedPlayerCount,
+      }
       await handleStartGame({
         keepLobby: true,
         startMode: 'new',
-        setupPatch,
+        setupPatch: normalizedLobbyPatch,
         lobbyGameId: lobbyState.gameId,
         bootstrapViewerPlayer: lobbyState.playerNumber,
       })
@@ -380,7 +433,7 @@ export default function useGameActions({
     } catch {
       // L'erreur est deja geree dans handleStartGame.
     }
-  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, lobbyState.playerNumber, ws])
+  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, lobbyState.playerNumber, lobbyState.players, setup.playerCount, ws])
 
   return {
     handleStartGame,

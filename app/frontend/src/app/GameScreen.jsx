@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+
 import ErrorToast from '@/components/feedback/ErrorToast'
 import LayoutControls from '@/components/LayoutControls'
 import CompassWidget from '@/features/camera/CompassWidget'
@@ -71,6 +73,9 @@ export default function GameScreen({
   aiBoardIds,
   isDuelWithAi,
   topDownView,
+  targetSelectionView,
+  selectedTargetBoardId,
+  currentTargetPlayer,
   effectiveCameraDirection,
   cameraStateKey,
   boardSize,
@@ -81,16 +86,23 @@ export default function GameScreen({
   placementPreview,
   waveMode,
   benchmarkEnabled,
+  actionFeed,
 }) {
   const placementAlreadyValidatedByServer = String(errorMessage ?? '')
     .toLowerCase()
     .includes('placement deja valide')
+  const actionFeedPanelRef = useRef(null)
   const shouldShowPlacementWaitBanner = localPlacementCompleted || placementAlreadyValidatedByServer
   const shouldShowPlacementPanel =
     gamePhase === 'PLACEMENT'
     && !localPlacementLocked
     && !placementAlreadyValidatedByServer
     && !localPlacementCompleted
+
+  useEffect(() => {
+    if (!actionFeedPanelRef.current) return
+    actionFeedPanelRef.current.scrollTop = actionFeedPanelRef.current.scrollHeight
+  }, [actionFeed])
 
   return (
     <main className="app-root">
@@ -117,6 +129,13 @@ export default function GameScreen({
         isGameOver={isGameOver}
         didLocalPlayerWin={didLocalPlayerWin}
       />
+      <div ref={actionFeedPanelRef} className="action-feed-panel">
+        <ul className="action-feed-panel__list">
+          {(actionFeed ?? []).map((line, index) => (
+            <li key={`${line}-${index}`} className="action-feed-panel__line">{line}</li>
+          ))}
+        </ul>
+      </div>
       <OpponentPresencePanel presence={opponentPresence} />
       <CompassWidget
         cameraFacingDirection={cameraFacingDirection}
@@ -164,6 +183,7 @@ export default function GameScreen({
         duelAiFocus={isDuelWithAi}
         gamePhase={gamePhase}
         topDownView={topDownView}
+        targetSelectionView={targetSelectionView}
         ownBoardId={clientOwnBoardId}
         cameraDirection={effectiveCameraDirection}
         cameraStateKey={cameraStateKey}
@@ -171,6 +191,8 @@ export default function GameScreen({
         boardStatesById={boardStatesById}
         recentImpactsByBoard={recentImpactsByBoard}
         interactiveBoards={interactiveBoards}
+        selectedTargetBoardId={selectedTargetBoardId}
+        currentTargetPlayer={currentTargetPlayer}
         previewCells={placementPreview}
         previewBoardId={expectedOwnBoardId}
         showCoordinates={showCoordinates}

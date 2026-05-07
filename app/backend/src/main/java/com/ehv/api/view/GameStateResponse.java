@@ -6,6 +6,7 @@ public record GameStateResponse(
     int boardSize,
     DuelPhase phase,
     int currentPlayer,
+    Integer currentTargetPlayer,
     Integer winner,
     List<BoardStateView> boards,
     List<Boolean> playersAlive,

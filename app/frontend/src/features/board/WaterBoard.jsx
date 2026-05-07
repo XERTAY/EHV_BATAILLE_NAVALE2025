@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei'
 import { useMemo, useRef } from 'react'
+import * as THREE from 'three'
 
 import FleetShipMeshes from '@/features/ships/FleetShipMeshes'
 
@@ -29,10 +30,11 @@ function WaterMaterial({ showWater, waveMode }) {
         thickness={0.6}
         clearcoat={0.65}
         clearcoatRoughness={0.2}
+        side={THREE.DoubleSide}
       />
     )
   }
-  return <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+  return <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
 }
 
 function GridLines({ gridPositions }) {
@@ -64,6 +66,24 @@ function PreviewOverlays({ previewCells, cellSize }) {
   ))
 }
 
+function BoardSelectionOverlay({ size, selected, hovered }) {
+  if (!selected && !hovered) return null
+  return (
+    <mesh position={[0, 0, 0.08]}>
+      <planeGeometry args={[size * 0.96, size * 0.96]} />
+      <meshBasicMaterial
+        color="#ffffff"
+        transparent
+        opacity={selected ? 0.5 : 0.32}
+        toneMapped={false}
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  )
+}
+
 /**
  * Plateau de jeu rendu en R3F : ocean/grille, overlays d'etat, navires 3D,
  * highlights de placement, FX d'impact et boussole de cellule survolee.
@@ -92,6 +112,9 @@ export default function WaterBoard({
   recentImpacts = [],
   onCellHover,
   ownBoard = false,
+  boardSelectable = false,
+  boardSelected = false,
+  gamePhase = null,
 }) {
   const geometryRef = useRef(null)
   const cellSize = size / cells
@@ -106,7 +129,7 @@ export default function WaterBoard({
     flipRows,
   })
   useCpuWaveAnimation({ geometryRef, waveMode })
-  const { hoveredCell, onPointerMove, onPointerOut, onPointerDown } = useBoardPointer({
+  const { hoveredCell, isBoardHovered, onPointerMove, onPointerOut, onPointerDown } = useBoardPointer({
     boardId,
     interactive,
     boardMathOptions,
@@ -115,8 +138,8 @@ export default function WaterBoard({
   })
 
   const coloredCells = useMemo(
-    () => getColoredCells({ cellStates, flipColumns, flipRows, cells, half, cellSize }),
-    [cellStates, flipColumns, flipRows, cells, half, cellSize],
+    () => getColoredCells({ cellStates, flipColumns, flipRows, cells, half, cellSize, ownBoard, gamePhase }),
+    [cellStates, flipColumns, flipRows, cells, half, cellSize, ownBoard, gamePhase],
   )
   const projectedPreviewCells = useMemo(
     () => getProjectedPreviewCells({ previewCells, flipColumns, flipRows, cells, half, cellSize }),
@@ -176,6 +199,9 @@ export default function WaterBoard({
         </mesh>
 
         {showGrid ? <GridLines gridPositions={gridPositions} /> : null}
+        {boardSelectable ? (
+          <BoardSelectionOverlay size={size} selected={boardSelected} hovered={isBoardHovered} />
+        ) : null}
 
         <ColoredCellOverlays coloredCells={coloredCells} cellSize={cellSize} />
 

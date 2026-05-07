@@ -201,29 +201,50 @@ function GameSetupMenu({
         />
       </div>
       <section className="menu-shell">
-        <div className="menu-topbar">
-          <div className="menu-topbar__left">
-            {menuStep !== 'home' && (
-              <button type="button" className="menu-button menu-button--ghost" onClick={() => setMenuStep('home')}>
-                Retour
-              </button>
-            )}
-            {menuStep === 'new' && shouldShareId && (
-              <div className="menu-topbar__lobby">
-                <span>ID: {lobby?.gameId ?? '---'}</span>
-                <button
-                  type="button"
-                  className="menu-button menu-button--secondary"
-                  onClick={handleCopyGameId}
-                  disabled={!canCopyGameId}
-                >
-                  {copyLabel}
-                </button>
-              </div>
-            )}
+        {menuStep === 'new' ? (
+          <div className="menu-topbar menu-topbar--new">
+            <h1>Bataille Navale</h1>
+            <div className="menu-topbar__right">
+              {shouldShareId && (
+                <div className="menu-topbar__lobby">
+                  <span>ID: {lobby?.gameId ?? '---'}</span>
+                  <button
+                    type="button"
+                    className="menu-button menu-button--secondary"
+                    onClick={handleCopyGameId}
+                    disabled={!canCopyGameId}
+                  >
+                    {copyLabel}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <h1>Bataille Navale</h1>
-        </div>
+        ) : (
+          <div className="menu-topbar">
+            <div className="menu-topbar__left">
+              {menuStep !== 'home' && (
+                <button type="button" className="menu-button menu-button--ghost" onClick={() => setMenuStep('home')}>
+                  Retour
+                </button>
+              )}
+              {menuStep === 'new' && shouldShareId && (
+                <div className="menu-topbar__lobby">
+                  <span>ID: {lobby?.gameId ?? '---'}</span>
+                  <button
+                    type="button"
+                    className="menu-button menu-button--secondary"
+                    onClick={handleCopyGameId}
+                    disabled={!canCopyGameId}
+                  >
+                    {copyLabel}
+                  </button>
+                </div>
+              )}
+            </div>
+            <h1>Bataille Navale</h1>
+          </div>
+        )}
 
         {menuStep === 'home' && (
           <div className="menu-stage menu-stage--home">
@@ -432,14 +453,23 @@ function GameSetupMenu({
 
         <div className="menu-footer">
           {menuStep === 'new' && !isGuestInLobby && (
-            <button
-              type="button"
-              className="menu-button menu-button--primary"
-              onClick={shouldShareId ? launchLobbyGame : launchNewGame}
-              disabled={!canLaunchNewGame}
-            >
-              Lancer la partie
-            </button>
+            <>
+              <button
+                type="button"
+                className="menu-button menu-button--secondary"
+                onClick={() => setMenuStep('home')}
+              >
+                Retour
+              </button>
+              <button
+                type="button"
+                className="menu-button menu-button--primary"
+                onClick={shouldShareId ? launchLobbyGame : launchNewGame}
+                disabled={!canLaunchNewGame}
+              >
+                Lancer la partie
+              </button>
+            </>
           )}
           {menuStep === 'new' && isGuestInLobby && (
             <div className="menu-start-note">En attente du lancement par l hote...</div>

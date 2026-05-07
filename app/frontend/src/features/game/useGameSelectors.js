@@ -41,6 +41,8 @@ export default function useGameSelectors({
   delayedOwnBoardCells,
   placement,
   shoot,
+  battleSubState,
+  selectedTargetBoardId,
 }) {
   const boards = useMemo(() => BOARD_CONFIGS[layoutSet], [layoutSet])
   const currentPlayer = gameState?.currentPlayer ?? 1
@@ -59,10 +61,11 @@ export default function useGameSelectors({
   const isGameOver = gamePhase === PHASES.GAME_OVER
   const didLocalPlayerWin = isGameOver && gameState?.winner === localPlayerNumber
   const boardSize = gameState?.boardSize ?? setup.boardSize ?? 10
+  const currentTargetPlayer = gameState?.currentTargetPlayer ?? null
 
   const boardStatesById = useMemo(
-    () => getBoardStatesById({ gameState, delayedOwnBoardCells }),
-    [gameState, delayedOwnBoardCells],
+    () => getBoardStatesById({ gameState, delayedOwnBoardCells, gamePhase }),
+    [gameState, delayedOwnBoardCells, gamePhase],
   )
   const expectedOwnBoardId = useMemo(
     () => getExpectedOwnBoardId({ boards, localPlayerNumber }),
@@ -79,8 +82,14 @@ export default function useGameSelectors({
   const isDuelWithAi = useMemo(() => getIsDuelWithAi(gameState), [gameState])
 
   const shouldOfferShootMode = useMemo(
-    () => getShouldOfferShootMode({ gamePhase, isLocalTurn, currentIsAi, isGameOver }),
-    [gamePhase, isLocalTurn, currentIsAi, isGameOver],
+    () => getShouldOfferShootMode({
+      gamePhase,
+      isLocalTurn,
+      currentIsAi,
+      isGameOver,
+      numPlayersInState,
+    }),
+    [gamePhase, isLocalTurn, currentIsAi, isGameOver, numPlayersInState],
   )
   const isPlayerInShootMode = useMemo(
     () => getIsPlayerInShootMode({
@@ -128,6 +137,9 @@ export default function useGameSelectors({
       expectedOwnBoardId,
       shouldOfferShootMode,
       shootModeActive: shoot.shootModeActive,
+      battleSubState,
+      currentTargetPlayer,
+      selectedTargetBoardId,
       boards,
       numPlayersInState,
       localPlayerNumber,
@@ -142,6 +154,9 @@ export default function useGameSelectors({
       expectedOwnBoardId,
       shouldOfferShootMode,
       shoot.shootModeActive,
+      battleSubState,
+      currentTargetPlayer,
+      selectedTargetBoardId,
       boards,
       numPlayersInState,
       localPlayerNumber,
@@ -168,6 +183,7 @@ export default function useGameSelectors({
     isDuelWithAi,
     shouldOfferShootMode,
     isPlayerInShootMode,
+    currentTargetPlayer,
     turnOverlayLabel,
     interactiveBoards,
     lobbyPartLabel,

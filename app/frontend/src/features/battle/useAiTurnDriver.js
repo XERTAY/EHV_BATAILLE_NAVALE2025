@@ -12,6 +12,7 @@ import { AI_STEP_DELAY_MS } from '@/constants/timings'
  *   runAiStepAction: (lobbyGameId?: string) => Promise<unknown>,
  *   lobbyGameId: string | null,
  *   lobbyInLobby: boolean,
+ *   lobbyIsHost: boolean,
  *   onStatus?: (message: string) => void,
  * }} params
  */
@@ -20,7 +21,9 @@ export default function useAiTurnDriver({
   runAiStepAction,
   lobbyGameId,
   lobbyInLobby,
+  lobbyIsHost,
   onStatus,
+  onAiAction,
 }) {
   const lockRef = useRef(false)
   const onStatusRef = useRef(onStatus)
@@ -30,6 +33,7 @@ export default function useAiTurnDriver({
 
   useEffect(() => {
     if (!enabled) return undefined
+    if (lobbyInLobby && !lobbyIsHost) return undefined
     if (lockRef.current) return undefined
     lockRef.current = true
 
@@ -38,7 +42,8 @@ export default function useAiTurnDriver({
     const timerId = window.setTimeout(async () => {
       try {
         const scopedGameId = lobbyInLobby && lobbyGameId ? lobbyGameId : undefined
-        await runAiStepAction(scopedGameId)
+        const action = await runAiStepAction(scopedGameId)
+        if (onAiAction) onAiAction(action)
       } catch {
         // L'erreur est geree dans le hook API.
       } finally {
@@ -50,5 +55,5 @@ export default function useAiTurnDriver({
       window.clearTimeout(timerId)
       lockRef.current = false
     }
-  }, [enabled, runAiStepAction, lobbyGameId, lobbyInLobby])
+  }, [enabled, runAiStepAction, lobbyGameId, lobbyInLobby, lobbyIsHost, onAiAction])
 }

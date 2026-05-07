@@ -31,7 +31,33 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState('Initialisation de la partie...')
   const [availableSaves, setAvailableSaves] = useState([])
   const [localPlacementWaiting, setLocalPlacementWaiting] = useState(false)
+  const [battleSubState, setBattleSubState] = useState('firing')
+  const [selectedTargetBoardId, setSelectedTargetBoardId] = useState(null)
+  const [actionFeed, setActionFeed] = useState([])
   const autoJoinTriedRef = useRef(false)
+  const seenActionKeysRef = useRef(new Set())
+  const appendActionFeed = useCallback((entry) => {
+    const shooter = Number(entry?.shooter)
+    const targetPlayer = Number(entry?.targetPlayer)
+    const x = Number(entry?.shotX ?? entry?.x)
+    const y = Number(entry?.shotY ?? entry?.y)
+    if (!Number.isInteger(shooter) || !Number.isInteger(targetPlayer) || !Number.isInteger(x) || !Number.isInteger(y)) return
+    if (x < 0 || y < 0) return
+    const cellLabel = `${String.fromCharCode(65 + x)}${y + 1}`
+    const key = `${shooter}:${targetPlayer}:${x}:${y}`
+    if (seenActionKeysRef.current.has(key)) return
+    seenActionKeysRef.current.add(key)
+    const timestamp = new Date().toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    setActionFeed((prev) => {
+      const next = [...prev, `${timestamp} | Joueur${shooter} -> ${cellLabel} -> Joueur${targetPlayer}`]
+      return next.slice(-100)
+    })
+  }, [])
+
 
   const { setup, applySetupPatch } = useSetupPersistence()
   const api = useGameApi()
@@ -53,11 +79,14 @@ export default function App() {
   // Joueur local preliminaire (utilisable avant les selecteurs finaux).
   const preliminaryLocalPlayerNumber = useMemo(
     () => getLocalPlayerNumber({
-      lobbyState: { inLobby: false, playerNumber: 1 },
+      lobbyState: {
+        inLobby: Boolean(ws.wsState?.gameId),
+        playerNumber: ws.wsState?.playerNumber ?? 1,
+      },
       gameState,
       currentPlayer: gameState?.currentPlayer ?? 1,
     }),
-    [gameState],
+    [ws.wsState?.gameId, ws.wsState?.playerNumber, gameState],
   )
 
   const placementLockedByPlayer = gameState?.placementLockedByPlayer ?? []
@@ -143,7 +172,33 @@ export default function App() {
       localPlacementLocked,
     },
     shoot: { shootModeActive: shoot.shootModeActive },
+    battleSubState,
+    selectedTargetBoardId,
   })
+
+  useEffect(() => {
+    const isFourPlayerBattle = selectors.gamePhase === 'BATTLE' && selectors.numPlayersInState > 2
+    if (!isFourPlayerBattle || !selectors.isLocalTurn) {
+      setBattleSubState('firing')
+      setSelectedTargetBoardId(null)
+      return
+    }
+    const lockedTarget = selectors.currentTargetPlayer
+    if (lockedTarget) {
+      const boardId = selectors.boards[lockedTarget - 1]?.boardId ?? null
+      setBattleSubState('firing')
+      setSelectedTargetBoardId(boardId)
+      return
+    }
+    setBattleSubState('target_selection')
+    setSelectedTargetBoardId(null)
+  }, [
+    selectors.gamePhase,
+    selectors.numPlayersInState,
+    selectors.isLocalTurn,
+    selectors.currentTargetPlayer,
+    selectors.boards,
+  ])
 
   // Synchronise le contexte du countdown avec les selecteurs (depend cycliquement
   // de `shoot.shootModeActive` -> `shouldOfferShootMode`).
@@ -187,7 +242,6 @@ export default function App() {
   useAiTurnDriver({
     enabled:
       screen === 'game'
-      && selectors.isDuelWithAi
       && Boolean(gameState)
       && !loading
       && selectors.currentIsAi
@@ -195,7 +249,9 @@ export default function App() {
     runAiStepAction: api.runAiStepAction,
     lobbyGameId: lobbyState.gameId,
     lobbyInLobby: lobbyState.inLobby,
+    lobbyIsHost: lobbyState.isHost,
     onStatus: setStatusMessage,
+    onAiAction: appendActionFeed,
   })
 
   usePlacementHotkeys({
@@ -222,7 +278,19 @@ export default function App() {
     },
     lobby: lobbyApi,
     ws,
+    battle: {
+      battleSubState,
+      setBattleSubState,
+      selectedTargetBoardId,
+      setSelectedTargetBoardId,
+    },
+    onBattleAction: appendActionFeed,
   })
+
+  useEffect(() => {
+    if (ws.wsMessage?.type !== 'SHOT_RESOLVED') return
+    appendActionFeed(ws.wsMessage)
+  }, [ws.wsMessage, appendActionFeed])
 
   useEffect(() => {
     const currentUrl = new URL(window.location.href)
@@ -261,6 +329,19 @@ export default function App() {
   const gameSummary = getGameSummary(setup)
   const localPlacementCompleted = selectors.gamePhase === 'PLACEMENT' && localPlacementLockedOrWaiting
   const shouldShowShootModePrompt = selectors.shouldOfferShootMode && !shoot.shootModeActive
+  const isFourPlayerBattle = selectors.gamePhase === 'BATTLE' && selectors.numPlayersInState > 2
+  const syncedTargetPlayer = lobbyState?.gameplaySync?.targetPlayer ?? null
+  const effectiveCurrentTargetPlayer = selectors.currentTargetPlayer ?? syncedTargetPlayer
+  const syncedTargetBoardId = effectiveCurrentTargetPlayer
+    ? selectors.boards[effectiveCurrentTargetPlayer - 1]?.boardId ?? null
+    : null
+  const effectiveSelectedTargetBoardId = selectedTargetBoardId ?? syncedTargetBoardId
+  const remoteFiringView = isFourPlayerBattle
+    && !selectors.isLocalTurn
+    && lobbyState?.gameplaySync?.phaseStep === 'firing'
+    && Boolean(syncedTargetBoardId)
+  const shouldUseGlobalTopDownView = isFourPlayerBattle
+    && (!selectors.isLocalTurn || battleSubState === 'target_selection')
   const shouldShowPlacementConfirmPrompt =
     selectors.gamePhase === 'PLACEMENT' && !localPlacementLockedOrWaiting && placement.remainingShips.length === 0
 
@@ -335,7 +416,6 @@ export default function App() {
       boards={selectors.boards}
       aiBoardIds={selectors.aiBoardIds}
       isDuelWithAi={selectors.isDuelWithAi}
-      topDownView={selectors.isPlayerInShootMode && shoot.shootModeActive}
       effectiveCameraDirection={camera.effectiveCameraDirection}
       cameraStateKey={camera.cameraStateKey}
       boardSize={selectors.boardSize}
@@ -343,9 +423,18 @@ export default function App() {
       recentImpactsByBoard={recentImpactsByBoard}
       opponentPresence={lobbyState?.opponentPresence}
       interactiveBoards={selectors.interactiveBoards}
+      selectedTargetBoardId={effectiveSelectedTargetBoardId}
+      currentTargetPlayer={effectiveCurrentTargetPlayer}
       placementPreview={placement.placementPreview}
       waveMode="gpu"
       benchmarkEnabled={false}
+      actionFeed={actionFeed}
+      targetSelectionView={shouldUseGlobalTopDownView}
+      topDownView={
+        (selectors.isPlayerInShootMode && shoot.shootModeActive)
+        || isFourPlayerBattle
+        || remoteFiringView
+      }
     />
   )
 }

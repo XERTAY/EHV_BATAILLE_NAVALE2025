@@ -4,12 +4,22 @@ import { CELL_COLORS } from './boardVisuals'
  * Convertit la matrice d'etat (cellStates) en overlays 2D positionnes en
  * coordonnees monde (en tenant compte des `flipColumns/flipRows`).
  */
-export function getColoredCells({ cellStates, flipColumns, flipRows, cells, half, cellSize }) {
+export function getColoredCells({
+  cellStates,
+  flipColumns,
+  flipRows,
+  cells,
+  half,
+  cellSize,
+  ownBoard = false,
+  gamePhase = null,
+}) {
   if (!cellStates) return []
   const overlays = []
   for (let y = 0; y < cellStates.length; y += 1) {
     for (let x = 0; x < cellStates[y].length; x += 1) {
       const state = cellStates[y][x]
+      if (!ownBoard && gamePhase !== 'GAME_OVER' && state === 'SHIP') continue
       const color = CELL_COLORS[state]
       if (!color) continue
       const rawX = flipColumns ? cells - 1 - x : x
