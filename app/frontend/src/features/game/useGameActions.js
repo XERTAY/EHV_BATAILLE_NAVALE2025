@@ -411,7 +411,14 @@ export default function useGameActions({
   }, [setLobbyState, setStatusMessage, ws])
 
   const handleStartLobbyGame = useCallback(async (setupPatch = {}) => {
-    if (!lobbyState.isHost || !lobbyState.gameId) return
+    const fallbackLobbyGameId = ws?.wsState?.gameId ?? null
+    const lobbyGameId = lobbyState.gameId ?? fallbackLobbyGameId
+    const lobbyPlayerNumber = Number(lobbyState.playerNumber ?? ws?.wsState?.playerNumber ?? 1) || 1
+    const isHostLike = lobbyState.isHost || lobbyPlayerNumber === 1
+    if (!isHostLike || !lobbyGameId) {
+      setStatusMessage('Creation du lobby en cours: identifiant de partie non recu.')
+      return
+    }
     try {
       const requestedPlayerCount = Number(setupPatch.playerCount ?? setup.playerCount) || 2
       const clampedPlayerCount = requestedPlayerCount === 4 ? 4 : 2
@@ -426,14 +433,14 @@ export default function useGameActions({
         keepLobby: true,
         startMode: 'new',
         setupPatch: normalizedLobbyPatch,
-        lobbyGameId: lobbyState.gameId,
-        bootstrapViewerPlayer: lobbyState.playerNumber,
+        lobbyGameId,
+        bootstrapViewerPlayer: lobbyPlayerNumber,
       })
-      ws.startGame(lobbyState.gameId)
+      ws.startGame(lobbyGameId)
     } catch {
       // L'erreur est deja geree dans handleStartGame.
     }
-  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, lobbyState.playerNumber, lobbyState.players, setup.playerCount, ws])
+  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, lobbyState.playerNumber, lobbyState.players, setStatusMessage, setup.playerCount, ws])
 
   return {
     handleStartGame,

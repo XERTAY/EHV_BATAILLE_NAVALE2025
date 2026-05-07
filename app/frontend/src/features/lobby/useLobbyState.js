@@ -78,17 +78,43 @@ function updateOpponentPresence(current, nextPatch) {
   }
 }
 
-function updateLobbyConfigPreview(current, message) {
-  if (!current.inLobby || current.gameId !== message.gameId) return current
+function safePositiveNumber(value, fallback) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return parsed
+}
+
+export function applyLobbyConfigUpdate(current, message, fallbackPlayerCount) {
+  const messageGameId = typeof message?.gameId === 'string' ? message.gameId : null
+  if (!messageGameId) return current
+  if (current.gameId && current.gameId !== messageGameId) return current
+
+  const inferredPlayerCount = safePositiveNumber(message.playerCount, fallbackPlayerCount)
+  const shouldBootstrapLobby = !current.inLobby || !current.gameId
+  const baseState = shouldBootstrapLobby
+    ? {
+        ...current,
+        inLobby: true,
+        // Si `GAME_CREATED` est manque, on accepte le snapshot lobby comme source d'identite.
+        gameId: messageGameId,
+        isHost: current.isHost || Number(current.playerNumber ?? 1) === 1,
+        players: safePositiveNumber(current.players, 1),
+        maxPlayers: safePositiveNumber(current.maxPlayers, inferredPlayerCount),
+      }
+    : current
+
   return {
-    ...current,
+    ...baseState,
+    maxPlayers: inferredPlayerCount,
     lobbyConfigPreview: {
-      boardSize: Number(message.boardSize) || current.lobbyConfigPreview.boardSize,
-      playerCount: Number(message.playerCount) || current.lobbyConfigPreview.playerCount,
-      humanPlayers: Number(message.humanPlayers) || current.lobbyConfigPreview.humanPlayers,
-      aiPlayers: Number(message.aiPlayers) || current.lobbyConfigPreview.aiPlayers,
-      fleetShipCount: Number(message.fleetShipCount) || current.lobbyConfigPreview.fleetShipCount,
-      fleetTotalCells: Number(message.fleetTotalCells) || current.lobbyConfigPreview.fleetTotalCells,
+      boardSize: safePositiveNumber(message.boardSize, baseState.lobbyConfigPreview.boardSize),
+      playerCount: safePositiveNumber(message.playerCount, baseState.lobbyConfigPreview.playerCount),
+      humanPlayers: safePositiveNumber(message.humanPlayers, baseState.lobbyConfigPreview.humanPlayers),
+      aiPlayers: Number.isFinite(Number(message.aiPlayers))
+        ? Math.max(0, Number(message.aiPlayers))
+        : baseState.lobbyConfigPreview.aiPlayers,
+      fleetShipCount: safePositiveNumber(message.fleetShipCount, baseState.lobbyConfigPreview.fleetShipCount),
+      fleetTotalCells: safePositiveNumber(message.fleetTotalCells, baseState.lobbyConfigPreview.fleetTotalCells),
     },
   }
 }
@@ -160,6 +186,7 @@ export default function useLobbyState({
                     : 'Partie terminee: defaite. Reconnexion en lecture de fin de partie.')
                 : 'Partie en cours. Reconnexion automatique reussie.'
             enterGameScreenWithState(state, status)
+            return state
           })
           .catch(() => {
             onStatus?.('Lobby rejoint, mais impossible de synchroniser l etat de la partie. Reessayez dans quelques secondes.')
@@ -175,7 +202,7 @@ export default function useLobbyState({
       return
     }
     if (wsMessage.type === 'LOBBY_CONFIG_UPDATED') {
-      setLobbyState((current) => updateLobbyConfigPreview(current, wsMessage))
+      setLobbyState((current) => applyLobbyConfigUpdate(current, wsMessage, fallbackPlayerCount))
       return
     }
     if (wsMessage.type === 'GAME_STARTED') {

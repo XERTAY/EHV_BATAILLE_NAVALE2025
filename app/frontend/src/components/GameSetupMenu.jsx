@@ -75,8 +75,9 @@ function GameSetupMenu({
   const shouldShareId = humanSlotsRemaining > 0
   const canLaunchFromLobby = Boolean(lobby?.inLobby && lobby?.players >= 2)
   const canCopyGameId = Boolean(shouldShareId && lobby?.gameId)
-  const isGuestInLobby = Boolean(shouldShareId && lobby?.inLobby && !lobby?.isHost)
-  const isHostInLobby = Boolean(shouldShareId && lobby?.inLobby && lobby?.isHost)
+  const hostRole = Boolean(lobby?.isHost || (lobby?.inLobby && Number(lobby?.playerNumber ?? 0) === 1))
+  const isGuestInLobby = Boolean(shouldShareId && lobby?.inLobby && !hostRole)
+  const isHostInLobby = Boolean(shouldShareId && lobby?.inLobby && hostRole)
   const canLaunchNewGame = shouldShareId ? Boolean(isHostInLobby && canLaunchFromLobby && canStart) : canStart
   const playersLabel = `Joueurs: ${lobby?.players ?? 0}/${lobby?.maxPlayers ?? setup.playerCount}`
 
@@ -143,10 +144,10 @@ function GameSetupMenu({
     createLobbyRequestedRef.current = false
     // Si l'hote modifie 2/4 joueurs avant que d'autres rejoignent,
     // on recree le lobby pour appliquer la nouvelle capacite max.
-    if (lobby.isHost && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
+    if (hostRole && (lobby.players ?? 0) <= 1 && lobby.maxPlayers !== setup.playerCount) {
       onCreateLobby(setup.playerCount)
     }
-  }, [menuStep, shouldShareId, lobby?.inLobby, lobby?.isHost, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby, wsConnected, ensureWs])
+  }, [menuStep, shouldShareId, lobby?.inLobby, lobby?.players, lobby?.maxPlayers, setup.playerCount, onCreateLobby, wsConnected, ensureWs, hostRole])
 
   useEffect(() => {
     if (menuStep !== 'new' || !shouldShareId || lobby?.inLobby) return undefined
@@ -165,13 +166,13 @@ function GameSetupMenu({
   }, [menuStep, shouldShareId])
 
   useEffect(() => {
-    if (lobby?.inLobby && !lobby?.isHost && menuStep !== 'online') {
+    if (lobby?.inLobby && !hostRole && menuStep !== 'online') {
       setMenuStep('online')
     }
-  }, [lobby?.inLobby, lobby?.isHost, menuStep])
+  }, [lobby?.inLobby, menuStep, hostRole])
 
   useEffect(() => {
-    if (menuStep !== 'new' || !shouldShareId || !lobby?.inLobby || !lobby?.isHost) return
+    if (menuStep !== 'new' || !shouldShareId || !lobby?.inLobby || !hostRole) return
     const fleetShipCount = setup.fleetShipSizes.length
     const fleetTotalCells = setup.fleetShipSizes.reduce((sum, size) => sum + (Number(size) || 0), 0)
     const payload = {
@@ -190,7 +191,7 @@ function GameSetupMenu({
     menuStep,
     shouldShareId,
     lobby?.inLobby,
-    lobby?.isHost,
+    hostRole,
     setup.boardSize,
     setup.playerCount,
     setup.fleetShipSizes,
@@ -319,8 +320,8 @@ function GameSetupMenu({
                 <div className="menu-summary">
                   <span>ID partie: {lobby.gameId}</span>
                   <span>Joueurs: {lobby.players}/{lobby.maxPlayers}</span>
-                  <span>{lobby.isHost ? 'Vous etes l hote' : 'Vous avez rejoint une partie'}</span>
-                  {!lobby.isHost && <span>En attente du lancement par l hote...</span>}
+                  <span>{hostRole ? 'Vous etes l hote' : 'Vous avez rejoint une partie'}</span>
+                  {!hostRole && <span>En attente du lancement par l hote...</span>}
                 </div>
               )}
             </article>
@@ -490,7 +491,7 @@ function GameSetupMenu({
           {menuStep === 'new' && isGuestInLobby && (
             <div className="menu-start-note">En attente du lancement par l hote...</div>
           )}
-          {menuStep === 'online' && lobby?.inLobby && lobby?.isHost && (
+          {menuStep === 'online' && lobby?.inLobby && hostRole && (
             <button
               type="button"
               className="menu-button menu-button--primary"
@@ -504,7 +505,7 @@ function GameSetupMenu({
         {statusMessage && <div className="menu-status">{statusMessage}</div>}
 
         <LobbyWaitingModal
-          open={Boolean(lobby?.inLobby && !lobby?.isHost)}
+          open={Boolean(lobby?.inLobby && !hostRole)}
           preview={lobby?.lobbyConfigPreview ?? {
             boardSize: 10,
             playerCount: 2,
