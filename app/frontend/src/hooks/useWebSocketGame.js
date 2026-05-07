@@ -44,31 +44,31 @@ function useWebSocketGame() {
     wsClient.ensureOpen()
   }, [])
 
-  const createGame = (maxPlayers = 4) => {
+  const createGame = useCallback((maxPlayers = 4) => {
     ensureConnected()
     wsClient.send({ type: 'CREATE_GAME', maxPlayers })
-  }
-  const joinGame = (gameId, intent = 'manual') => {
+  }, [ensureConnected])
+  const joinGame = useCallback((gameId, intent = 'manual') => {
     ensureConnected()
     const normalized = String(gameId ?? '').trim().toLowerCase()
     const resumeToken = getLobbyResumeToken(normalized)
     const normalizedIntent = intent === 'auto_resume' ? 'auto_resume' : 'manual'
     setPendingJoinIntent(normalizedIntent)
     wsClient.send({ type: 'JOIN_GAME', gameId: normalized, resumeToken: resumeToken ?? undefined })
-  }
-  const startGame = (gameId) => {
+  }, [ensureConnected])
+  const startGame = useCallback((gameId) => {
     ensureConnected()
     wsClient.send({ type: 'START_GAME', gameId })
-  }
-  const leaveGame = () => {
+  }, [ensureConnected])
+  const leaveGame = useCallback(() => {
     ensureConnected()
     wsClient.send({ type: 'LEAVE_GAME' })
-  }
-  const updateLobbyConfig = (config) => {
+  }, [ensureConnected])
+  const updateLobbyConfig = useCallback((config) => {
     ensureConnected()
     wsClient.send({ type: 'UPDATE_LOBBY_CONFIG', ...config })
-  }
-  const send = (obj) => wsClient.send(obj)
+  }, [ensureConnected])
+  const send = useCallback((obj) => wsClient.send(obj), [])
 
   return {
     wsState,
