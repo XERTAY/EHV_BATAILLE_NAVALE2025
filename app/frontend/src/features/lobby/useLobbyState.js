@@ -41,6 +41,7 @@ function applyGameCreated(message, fallbackPlayerCount) {
     playerNumber: message.playerNumber ?? 1,
     opponentPresence: INITIAL_LOBBY_STATE.opponentPresence,
     lobbyConfigPreview: INITIAL_LOBBY_STATE.lobbyConfigPreview,
+    gameplaySync: INITIAL_LOBBY_STATE.gameplaySync,
   }
 }
 
@@ -54,6 +55,7 @@ function applyJoinedGame(message, fallbackPlayerCount) {
     playerNumber: message.playerNumber ?? 1,
     opponentPresence: INITIAL_LOBBY_STATE.opponentPresence,
     lobbyConfigPreview: INITIAL_LOBBY_STATE.lobbyConfigPreview,
+    gameplaySync: INITIAL_LOBBY_STATE.gameplaySync,
   }
 }
 

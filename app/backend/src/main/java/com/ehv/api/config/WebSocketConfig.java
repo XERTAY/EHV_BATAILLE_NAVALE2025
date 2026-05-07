@@ -19,7 +19,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     public WebSocketConfig(
             GameWebSocketHandler gameWebSocketHandler,
-            @Value("${app.security.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+            @Value("${app.security.allowed-origins:http://localhost:2462,http://localhost:5173}") String allowedOrigins) {
         this.gameWebSocketHandler = Objects.requireNonNull(gameWebSocketHandler);
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
             .map(String::trim)

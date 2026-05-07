@@ -49,7 +49,7 @@ public class GameController {
             GameWebSocketHandler gameWebSocketHandler,
             LobbyJwtService lobbyJwtService,
             GameSessionManager gameSessionManager,
-            @Value("${app.security.local-debug-endpoints-enabled:false}") boolean localDebugEndpointsEnabled) {
+            @Value("${app.security.local-debug-endpoints-enabled:true}") boolean localDebugEndpointsEnabled) {
         this.lobbyGameRegistry = lobbyGameRegistry;
         this.gameWebSocketHandler = gameWebSocketHandler;
         this.lobbyJwtService = lobbyJwtService;
@@ -145,7 +145,13 @@ public class GameController {
         return token;
     }
 
-    private int requireAuthorizedPlayer(String authorizationHeader, String gameId) {
+    private int requireAuthorizedPlayer(String authorizationHeader, String gameId, Integer requestedPlayer) {
+        if (!hasLobbyGameId(gameId)) {
+            if (requestedPlayer == null || requestedPlayer <= 0) {
+                throw new IllegalArgumentException("Le numero de joueur est requis.");
+            }
+            return requestedPlayer;
+        }
         String requiredGameId = requireGameScope(gameId);
         String token = requireLobbyAuthorizationIfScoped(authorizationHeader, requiredGameId, null);
         Integer player = lobbyJwtService.resolvePlayerIfValid(token, gameId);
@@ -157,8 +163,11 @@ public class GameController {
     }
 
     private void requireHostAuthorization(String authorizationHeader, String gameId) {
+        if (!hasLobbyGameId(gameId)) {
+            return;
+        }
         String requiredGameId = requireGameScope(gameId);
-        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, requiredGameId);
+        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, requiredGameId, null);
         if (!gameSessionManager.isHostPlayer(requiredGameId, authorizedPlayer)) {
             LOG.warn("HOST_AUTH_DENIED gameId={} player={}", requiredGameId, authorizedPlayer);
             throw new IllegalArgumentException("Action reservee a l'hote de la partie.");
@@ -207,7 +216,7 @@ public class GameController {
     public ActionResponse place(
             @RequestBody PlaceShipRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
-        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId());
+        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId(), request.player());
         PlaceShipRequest sanitizedRequest = new PlaceShipRequest(
             authorizedPlayer, request.shipType(), request.x(), request.y(), request.orientation(), request.gameId());
         ActionResponse response = game(request.gameId()).placeShip(sanitizedRequest);
@@ -221,7 +230,7 @@ public class GameController {
     public ActionResponse removeShip(
             @RequestBody RemoveShipRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
-        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId());
+        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId(), request.player());
         RemoveShipRequest sanitizedRequest = new RemoveShipRequest(
             authorizedPlayer, request.shipType(), request.x(), request.y(), request.gameId());
         ActionResponse response = game(request.gameId()).removePlacedShip(sanitizedRequest);
@@ -235,7 +244,7 @@ public class GameController {
     public ActionResponse confirmPlacement(
             @RequestBody ConfirmPlacementRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
-        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId());
+        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId(), request.player());
         ConfirmPlacementRequest sanitizedRequest = new ConfirmPlacementRequest(authorizedPlayer, request.gameId());
         ActionResponse response = game(request.gameId()).confirmPlacement(sanitizedRequest);
         if (hasLobbyGameId(request.gameId())) {
@@ -254,7 +263,7 @@ public class GameController {
     public ActionResponse fire(
             @RequestBody FireRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
-        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId());
+        int authorizedPlayer = requireAuthorizedPlayer(authorizationHeader, request.gameId(), request.player());
         FireRequest sanitizedRequest = new FireRequest(
             authorizedPlayer, request.x(), request.y(), request.targetPlayer(), request.gameId());
         ActionResponse response = game(request.gameId()).fireAt(sanitizedRequest);

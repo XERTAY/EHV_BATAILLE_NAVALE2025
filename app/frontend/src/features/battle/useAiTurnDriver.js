@@ -12,6 +12,7 @@ import { AI_STEP_DELAY_MS } from '@/constants/timings'
  *   runAiStepAction: (lobbyGameId?: string) => Promise<unknown>,
  *   lobbyGameId: string | null,
  *   lobbyInLobby: boolean,
+ *   lobbyIsHost: boolean,
  *   onStatus?: (message: string) => void,
  * }} params
  */
@@ -20,6 +21,7 @@ export default function useAiTurnDriver({
   runAiStepAction,
   lobbyGameId,
   lobbyInLobby,
+  lobbyIsHost,
   onStatus,
   onAiAction,
 }) {
@@ -31,6 +33,7 @@ export default function useAiTurnDriver({
 
   useEffect(() => {
     if (!enabled) return undefined
+    if (lobbyInLobby && !lobbyIsHost) return undefined
     if (lockRef.current) return undefined
     lockRef.current = true
 
@@ -52,5 +55,5 @@ export default function useAiTurnDriver({
       window.clearTimeout(timerId)
       lockRef.current = false
     }
-  }, [enabled, runAiStepAction, lobbyGameId, lobbyInLobby, onAiAction])
+  }, [enabled, runAiStepAction, lobbyGameId, lobbyInLobby, lobbyIsHost, onAiAction])
 }

@@ -130,9 +130,11 @@ export default function GameScreen({
         didLocalPlayerWin={didLocalPlayerWin}
       />
       <div ref={actionFeedPanelRef} className="action-feed-panel">
-        {(actionFeed ?? []).map((line, index) => (
-          <div key={`${line}-${index}`} className="action-feed-panel__line">{line}</div>
-        ))}
+        <ul className="action-feed-panel__list">
+          {(actionFeed ?? []).map((line, index) => (
+            <li key={`${line}-${index}`} className="action-feed-panel__line">{line}</li>
+          ))}
+        </ul>
       </div>
       <OpponentPresencePanel presence={opponentPresence} />
       <CompassWidget
