@@ -13,6 +13,8 @@ export default function MenuScreen({
   onCreateLobby,
   onJoinLobby,
   onRefreshSaves,
+  onLeaveLobby,
+  onUpdateLobbyConfig,
   loading,
   wsConnected,
   ensureWs,
@@ -29,6 +31,8 @@ export default function MenuScreen({
       onCreateLobby={onCreateLobby}
       onJoinLobby={onJoinLobby}
       onRefreshSaves={onRefreshSaves}
+      onLeaveLobby={onLeaveLobby}
+      onUpdateLobbyConfig={onUpdateLobbyConfig}
       loading={loading}
       wsConnected={wsConnected}
       ensureWs={ensureWs}

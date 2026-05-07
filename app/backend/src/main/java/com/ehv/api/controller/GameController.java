@@ -191,6 +191,18 @@ public class GameController {
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
         String scope = lobbyScopeFromReset(request);
         requireHostAuthorization(authorizationHeader, scope);
+        if (request != null) {
+            LOG.info(
+                "GAME_RESET scope={} boardSize={} playerCount={} withAI={} humanPlayers={}",
+                hasLobbyGameId(scope) ? scope : "local",
+                request.boardSize(),
+                request.playerCount(),
+                request.withAI(),
+                request.humanPlayers()
+            );
+        } else {
+            LOG.info("GAME_RESET scope={} defaults=true", hasLobbyGameId(scope) ? scope : "local");
+        }
         if (request != null && request.boardSize() > 0 && request.fleetShipSizes() != null && !request.fleetShipSizes().isEmpty()) {
             return game(scope).resetAndGetState(
                 request.boardSize(),

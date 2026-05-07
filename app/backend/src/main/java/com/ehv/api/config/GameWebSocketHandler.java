@@ -16,6 +16,8 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -29,6 +31,7 @@ import com.ehv.api.security.LobbyJwtService;
 
 @Component
 public class GameWebSocketHandler extends TextWebSocketHandler {
+    private static final Logger LOG = LoggerFactory.getLogger(GameWebSocketHandler.class);
     private final GameSessionManager sessionManager;
     private final LobbyGameRegistry lobbyGameRegistry;
     private final LobbyJwtService lobbyJwtService;
@@ -45,6 +48,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
+        LOG.info("WS_CONNECTED sessionId={} remote={}", session.getId(), session.getRemoteAddress());
         send(session, Map.of(
             "type", "CONNECTED",
             "sessionId", session.getId()
@@ -66,6 +70,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             send(session, Map.of("type", "ERROR", "message", "Missing message type."));
             return;
         }
+        LOG.info("WS_MESSAGE sessionId={} type={}", session.getId(), type);
 
         switch (type) {
             case "CREATE_GAME" -> handleCreateGame(session, msg);
@@ -85,6 +90,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) throws Exception {
+        LOG.info("WS_CLOSED sessionId={} code={} reason={}", session.getId(), status.getCode(), status.getReason());
         sessionManager.leaveGame(session);
     }
 
@@ -94,6 +100,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         GameSessionManager.GameSession game = sessionManager.createGame(maxPlayers, session);
         int playerNumber = 1;
+        LOG.info("LOBBY_CREATED gameId={} hostSessionId={} maxPlayers={}", game.getGameId(), session.getId(), maxPlayers);
         send(session, Map.of(
             "type", "GAME_CREATED",
             "gameId", game.getGameId(),
@@ -113,6 +120,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
 
         String normalizedGameId = gameId.strip().toLowerCase();
+        LOG.info("LOBBY_JOIN_ATTEMPT sessionId={} gameId={}", session.getId(), normalizedGameId);
         String resumeToken = msg.has("resumeToken") ? msg.get("resumeToken").getAsString() : null;
         Integer preferredPlayerNumber = null;
         if (resumeToken != null && !resumeToken.isBlank()) {
@@ -148,6 +156,15 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
         GameSessionManager.GameSession game = joinResult.game();
         int playerNumber = joinResult.playerNumber();
+        LOG.info(
+            "LOBBY_JOINED gameId={} sessionId={} playerNumber={} resumed={} players={}/{}",
+            game.getGameId(),
+            session.getId(),
+            playerNumber,
+            joinResult.resumedSession(),
+            game.getPlayerCount(),
+            game.getMaxPlayers()
+        );
 
         Map<String, Object> joinedPayload = new HashMap<>();
         joinedPayload.put("type", "JOINED_GAME");
@@ -220,6 +237,15 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
         GameSessionManager.LobbyConfigSnapshot snapshot = parseLobbyConfig(msg);
         sessionManager.updateLobbyConfigSnapshot(gameId, snapshot);
+        LOG.info(
+            "LOBBY_CONFIG_UPDATED gameId={} hostSessionId={} boardSize={} playerCount={} humanPlayers={} aiPlayers={}",
+            gameId,
+            session.getId(),
+            snapshot.boardSize(),
+            snapshot.playerCount(),
+            snapshot.humanPlayers(),
+            snapshot.aiPlayers()
+        );
         broadcastLobbyConfigSnapshot(game, snapshot, gameId);
     }
 
@@ -229,6 +255,12 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             send(session, Map.of("type", "LEFT_GAME", "ok", false));
             return;
         }
+        LOG.info(
+            "LOBBY_LEFT gameId={} sessionId={} playerNumber={}",
+            leaveResult.gameId(),
+            session.getId(),
+            leaveResult.playerNumber()
+        );
         send(session, Map.of(
             "type", "LEFT_GAME",
             "ok", true,
@@ -266,6 +298,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             send(session, Map.of("type", "ERROR", "message", "At least 2 players are required."));
             return;
         }
+        LOG.info(
+            "LOBBY_START_REQUEST gameId={} hostSessionId={} players={}/{}",
+            game.getGameId(),
+            session.getId(),
+            game.getPlayerCount(),
+            game.getMaxPlayers()
+        );
 
         broadcastToGame(game, Map.of(
             "type", "GAME_STARTED",
