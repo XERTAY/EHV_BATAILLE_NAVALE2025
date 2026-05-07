@@ -64,6 +64,12 @@ export default function App() {
   const ws = useWebSocketGame()
   const { gameState, loading, errorMessage, listSavesAction } = api
 
+  useEffect(() => {
+    // Etablit la socket des l'ouverture de l'app pour eviter un create lobby
+    // declenche trop tot (avant handshake CONNECTED).
+    ws.ensureConnected()
+  }, [ws.ensureConnected])
+
   const refreshSaves = useCallback(async () => {
     try {
       setAvailableSaves(await listSavesAction())
