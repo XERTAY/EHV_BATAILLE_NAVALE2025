@@ -26,5 +26,3 @@ public class Cell implements Serializable {
         this.status = status;
     }
 }
-
-

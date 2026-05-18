@@ -1,8 +1,8 @@
 package com.ehv.battleship.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.io.Serializable;
 
 public class Grid implements Serializable {
 
@@ -28,58 +28,6 @@ public class Grid implements Serializable {
 
     public int getSize() {
         return size;
-    }
-
-    public String toTargetViewString() {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("     ");
-        for (int col = 1; col <= size; col++) {
-            sb.append(col);
-            if (col < size) {
-                sb.append(" ");
-            }
-        }
-        sb.append(" ( x )");
-        sb.append(System.lineSeparator());
-
-        for (int rowDisplay = 1; rowDisplay <= size; rowDisplay++) {
-            int y = rowDisplay - 1;
-
-            if (rowDisplay < 10) {
-                sb.append(rowDisplay).append("  | ");
-            } else {
-                sb.append(rowDisplay).append(" | ");
-            }
-
-            for (int x = 0; x < size; x++) {
-                CellStatus status = cells[y][x].getStatus();
-                char symbol;
-
-                if (status == CellStatus.HIT) {
-                    symbol = 'X';
-                } else if (status == CellStatus.SUNK) {
-                    symbol = '#';
-                } else if (status == CellStatus.MISS) {
-                    symbol = '?';
-                } else {
-                    symbol = 'O';
-                }
-
-                sb.append(symbol);
-                if (x < size - 1) {
-                    sb.append(" ");
-                }
-            }
-
-            if (rowDisplay < size) {
-                sb.append(System.lineSeparator());
-            }
-        }
-
-        sb.append(System.lineSeparator());
-        sb.append("( y )");
-        return sb.toString();
     }
 
     public CellStatus getCell(Coordinate coordinate) {
@@ -111,7 +59,7 @@ public class Grid implements Serializable {
         if (!isValidCoordinate(startCoordinate)) {
             return false;
         }
-        
+
         // Calculer toutes les coordonnées que le navire occuperait
         for (int i = 0; i < size; i++) {
             Coordinate coord;
@@ -131,18 +79,18 @@ public class Grid implements Serializable {
                 default:
                     return false;
             }
-            
+
             // Vérifier que la coordonnée est valide
             if (!isValidCoordinate(coord)) {
                 return false;
             }
-            
+
             // Vérifier que la cellule n'est pas déjà occupée par un navire
             if (getCell(coord) == CellStatus.SHIP) {
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -196,5 +144,3 @@ public class Grid implements Serializable {
         return coordinates;
     }
 }
-
-

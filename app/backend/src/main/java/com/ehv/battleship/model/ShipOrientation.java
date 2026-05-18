@@ -6,5 +6,3 @@ public enum ShipOrientation {
     VERTICAL,        // Vers le bas (y+)
     VERTICAL_UP      // Vers le haut (y-)
 }
-
-

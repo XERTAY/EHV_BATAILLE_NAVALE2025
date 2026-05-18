@@ -1,10 +1,10 @@
 package com.ehv.battleship.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.io.Serializable;
 
 public class Fleet implements Serializable {
 
@@ -50,11 +50,11 @@ public class Fleet implements Serializable {
     // Flotte requise configurable
     public boolean isComplete() {
         List<Integer> shipSizes = new ArrayList<>();
-        
+
         for (Ship ship : ships) {
             shipSizes.add(ship.getSize());
         }
-        
+
         // Vérifier navire
         for (int requiredSize : requiredSizes) {
             if (!shipSizes.contains(Integer.valueOf(requiredSize))) {
@@ -62,7 +62,7 @@ public class Fleet implements Serializable {
             }
             shipSizes.remove(Integer.valueOf(requiredSize)); // Note: retirer pour éviter les doublons
         }
-        
+
         // Pas de navires en trop
         return shipSizes.isEmpty();
     }
@@ -70,7 +70,7 @@ public class Fleet implements Serializable {
     // Vérifie qu'il n'y a pas de chevauchement avec les navires existants
     public boolean canAddShip(Ship newShip) {
         List<Coordinate> newCoordinates = newShip.getCoordinates();
-        
+
         for (Ship existingShip : ships) {
             for (Coordinate existingCoord : existingShip.getCoordinates()) {
                 if (newCoordinates.contains(existingCoord)) {
@@ -78,7 +78,7 @@ public class Fleet implements Serializable {
                 }
             }
         }
-        
+
         return true;
     }
 
@@ -91,5 +91,3 @@ public class Fleet implements Serializable {
         return !ships.isEmpty();
     }
 }
-
-

@@ -1,7 +1,7 @@
 package com.ehv.battleship.model;
 
-import java.util.List;
 import java.io.Serializable;
+import java.util.List;
 
 public class Player implements Serializable {
 
@@ -72,8 +72,6 @@ public Player(String name, int gridSize, List<Integer> fleetShipSizes) {
         return false;
     }
 
-    
-    
+
+
 }
-
-

@@ -1,6 +1,7 @@
-package com.ehv.battleship.model;
+package com.ehv.battleship.persistence;
 
 import java.io.IOException;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -10,8 +11,12 @@ import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 
+import com.ehv.battleship.model.AI;
+import com.ehv.battleship.model.Player;
+
 /**
  * Sérialisation polymorphe {@link Player} / {@link AI} sans dépendance vers un contrôleur.
+ * Vit dans le package persistence pour conserver le modèle libre de Gson.
  */
 final class PlayerTypeAdapter extends TypeAdapter<Player> {
 

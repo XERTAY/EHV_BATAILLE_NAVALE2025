@@ -7,5 +7,3 @@ public enum ShotResult {
     ALREADY_HIT,
     ALREADY_MISS
 }
-
-

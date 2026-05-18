@@ -7,5 +7,3 @@ public enum CellStatus {
     MISS,
     SUNK
 }
-
-

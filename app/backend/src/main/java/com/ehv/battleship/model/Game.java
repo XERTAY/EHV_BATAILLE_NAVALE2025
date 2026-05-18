@@ -1,9 +1,9 @@
 package com.ehv.battleship.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.io.Serializable;
 
 public class Game implements Serializable {
 
@@ -56,6 +56,22 @@ public class Game implements Serializable {
 
     public Player getCurrentPlayer() {
         return players.get(currentPlayerIndex);
+    }
+
+    /**
+     * Positionne le joueur courant (1-based). Utilisé par le contrôleur lors de la
+     * navigation de placement (le moteur de tour `switchTurn` ne sait que avancer).
+     */
+    public void setCurrentPlayerByNumber(int playerNumber) {
+        if (playerNumber < 1 || playerNumber > players.size()) {
+            throw new IllegalArgumentException(
+                "Numéro de joueur hors plage : " + playerNumber);
+        }
+        this.currentPlayerIndex = playerNumber - 1;
+    }
+
+    public int getCurrentPlayerNumber() {
+        return currentPlayerIndex + 1;
     }
 
     /**
@@ -194,28 +210,26 @@ public class Game implements Serializable {
         if (player == null || ship == null) {
             throw new IllegalArgumentException("Le joueur et le navire ne peuvent pas être nuls");
         }
-        
+
         if (!players.contains(player)) {
             throw new IllegalArgumentException("Le joueur n'appartient pas à ce jeu");
         }
-        
+
         // Vérifier placement sur la grille
         if (!player.getGrid().canPlaceShip(
-            ship.getCoordinates().get(0), 
-            ship.getSize(), 
+            ship.getCoordinates().get(0),
+            ship.getSize(),
             ship.getOrientation())) {
             throw new IllegalArgumentException("Le navire ne peut pas être placé à cette position");
         }
-        
+
         // Vérifier chevauchement avec autres navires
         if (!player.getFleet().canAddShip(ship)) {
             throw new IllegalArgumentException("Le navire chevauche un autre navire existant");
         }
-        
+
         // Placer sur la grille et ajouter à la flotte
         player.getGrid().placeShip(ship); // Note: marque les cellules sur la grille
         player.getFleet().addShip(ship); // Note: ajoute à la liste de la flotte
     }
 }
-
-

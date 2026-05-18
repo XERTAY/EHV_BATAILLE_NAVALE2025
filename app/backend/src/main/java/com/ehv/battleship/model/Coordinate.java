@@ -49,5 +49,3 @@ public class Coordinate implements Serializable {
         return "(" + x + ", " + y + ")";
     }
 }
-
-
