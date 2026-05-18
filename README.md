@@ -1,37 +1,92 @@
-# Backend - Bataille Navale
+# Bataille Navale (EHV 2025)
+
+## Démarrage rapide
+
+### Mode console legacy (sans navigateur)
+
+Jeu **JvsJ en terminal** via `ConsoleMain` — pas d’API Spring Boot ni de frontend.
+
+Depuis la **racine du projet** :
+
+```bash
+make makerun
+```
+
+Alias conservés : `make run` ou `make run-console` (compile puis lance la classe console).
+
+**Windows** : double-clic ou invite de commandes avec `run.bat` (Maven `exec:java` sur `ConsoleMain`).
+
+**Prérequis** : Java 17+, Maven 3.9+ (Make sous Linux/macOS ; sous Windows, `run.bat` suffit si Maven est dans le `PATH`).
+
+### Mode web (frontend 3D + API + WebSocket)
+
+1. Backend : `mvn -f app/backend/pom.xml spring-boot:run` → http://localhost:4784  
+2. Frontend : `cd app/frontend && npm install && npm run dev` → http://localhost:2462  
+
+Détails : [Lancer backend et frontend en local](#lancer-backend-et-frontend-en-local-tests).
+
+---
 
 ## Architecture MVC
 
+Le backend respecte un MVC strict : la logique de jeu vit dans **un seul** contrôleur
+(`com.ehv.battleship.legacy.controller.GameController`) qui pilote le modèle. Les couches
+console et API HTTP/WS ne sont que des présentations.
+
+```
+com.ehv.battleship.model        ← Modèle pur (Domain), aucune I/O
+com.ehv.battleship.persistence  ← Sauvegarde / chargement (.save) via Gson
+com.ehv.battleship.legacy.controller.GameController  ← Contrôleur unique du jeu
+com.ehv.battleship.view         ← Vue console (ConsoleMain, ConsoleRenderer)
+com.ehv.api.session.GameSession ← Façade API : verrou + delégation vers le contrôleur
+com.ehv.api.presentation.*      ← Présenteurs JSON (state + actions)
+com.ehv.api.view.*              ← DTOs JSON exposés au frontend
+com.ehv.api.controller.GameController  ← Endpoints HTTP REST
+com.ehv.api.config.GameWebSocketHandler ← WebSocket (lobby, présence, événements)
+```
+
 ### Modèle (Domain)
 
-- **Game** : Gère l'état du jeu, la liste des joueurs, les tirs et la logique métier. Utilise une liste de joueurs extensible (minimum 2).
-- **Player** : Représente un joueur avec sa grille et sa flotte. Peut contenir un composant `AI` optionnel (null pour les joueurs humains).
-- **AI** : Composant d'intelligence artificielle pour les joueurs IA. Gère le choix des cibles et le placement automatique de la flotte.
-- **Grid** : Grille de jeu contenant des cellules
-- **Cell** : Cellule avec coordonnée et statut
-- **Fleet** : Collection de navires
-- **Ship** : Navire avec coordonnées, orientation et état
-- **Coordinate** : Position (x, y) sur la grille
-- **Enums** : `GameState`, `CellStatus`, `ShotResult`, `ShipOrientation`
+- **Game** : état du jeu (joueurs, tours, tirs, fin de partie).
+- **Player / AI** : joueur humain ou IA (composant placement/tir auto).
+- **Grid / Cell / Fleet / Ship / Coordinate** : géométrie & navires.
+- **Enums** : `GameState`, `CellStatus`, `ShotResult`, `ShipOrientation`.
+- Le modèle ne dépend de Gson, Spring, console : aucune I/O.
+
+### Persistance
+
+- `com.ehv.battleship.persistence.GamePersistence` : `.save` JSON (Gson) + restriction stricte sur `saves/`.
+- `PlayerTypeAdapter` (package-privé) : sérialisation polymorphe Player/AI.
 
 ### Contrôleur
 
-- **GameController** : Orchestre les actions du jeu, valide les coordonnées et gère les tours
+- `GameController` (legacy) : **seul** détenteur des règles du jeu — placement, retrait,
+  validation, tir avec verrouillage de cible 4J, tirs IA, forfait, fin de partie.
 
-### Vue
+### Vue console
 
-- **ConsoleMain** : Point d'entrée console
-- **ConsoleRenderer** : Rendu des grilles et affichage console
+- `ConsoleMain` : boucle console, lecture clavier, sauvegarde / chargement.
+- `ConsoleRenderer` : rendu ASCII (grille personnelle + grille de tir + tours).
 
-### Infrastructure
+### Vue API
 
-- **web/dto/** : DTOs pour API web (à venir)
+- `com.ehv.api.session.GameSession` : verrou monitor + délégation au contrôleur.
+- `com.ehv.api.presentation.ApiGameStatePresenter` : projection `GameState` → `GameStateResponse`
+  + brouillard de guerre (les bateaux adverses sont masqués hors `GAME_OVER`).
+- `com.ehv.api.presentation.ApiActionPresenter` : projection `ShotResult` → `ActionResponse`
+  + messages utilisateur.
+- `com.ehv.api.controller.GameController` : endpoints REST minces, délèguent à `GameSession`.
+- `com.ehv.api.config.GameWebSocketHandler` : événements lobby/présence (sans règles métier).
 
 ## Séparation des responsabilités
 
-- Aucune I/O console dans le modèle ni les contrôleurs
-- Toute l'I/O est confinée à la vue
-- Architecture MVC stricte
+- Aucune I/O console / réseau dans le modèle.
+- Toutes les règles métier passent par `GameController` (legacy).
+- L'API ne fait que sérialiser / désérialiser et appliquer le brouillard de guerre.
+- Les sauvegardes vivent dans `com.ehv.battleship.persistence`, hors du modèle.
+
+Le détail du chantier de refactorisation est consigné dans
+[`doc/MVC_REFACTOR_AUDIT.md`](doc/MVC_REFACTOR_AUDIT.md).
 
 ## Gestion des joueurs et de l'IA
 
@@ -61,19 +116,7 @@ Le diagramme inclut :
 
 ## Lancer le jeu en mode console
 
-Depuis la racine du projet :
-
-```
-make makerun
-```
-
-Cette commande compile le backend puis lance `ConsoleMain` (mode console only).
-
-Commande équivalente (conservée pour compatibilite) :
-
-```
-make run
-```
+Voir [Mode console legacy](#mode-console-legacy-sans-navigateur) en tête de ce README (`make makerun`, `make run`, `run.bat`).
 
 ## Lancer backend et frontend en local (tests)
 
