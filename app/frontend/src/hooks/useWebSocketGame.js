@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getLobbyResumeToken, setLobbyResumeToken } from '@/features/lobby/lobbyAuthStorage'
 import wsClient from '../api/wsClient'
 
@@ -12,6 +12,8 @@ function useWebSocketGame() {
   })
   const [wsMessage, setWsMessage] = useState(null)
   const [pendingJoinIntent, setPendingJoinIntent] = useState('manual')
+  const pendingJoinIntentRef = useRef(pendingJoinIntent)
+  pendingJoinIntentRef.current = pendingJoinIntent
 
   useEffect(() => {
     wsClient.onOpen = () => setWsState((s) => ({ ...s, connected: true }))
@@ -19,7 +21,7 @@ function useWebSocketGame() {
     wsClient.onError = (e) => setWsState((s) => ({ ...s, error: e }))
     wsClient.onMessage = (msg) => {
       if (msg.type === 'JOINED_GAME') {
-        const enriched = { ...msg, joinIntent: pendingJoinIntent }
+        const enriched = { ...msg, joinIntent: pendingJoinIntentRef.current }
         setWsMessage(enriched)
       } else {
         setWsMessage(msg)
@@ -35,8 +37,14 @@ function useWebSocketGame() {
         setPendingJoinIntent('manual')
       }
     }
+    wsClient.ensureOpen()
     return () => {
-      wsClient.close()
+      // Ne pas fermer la socket ici : singleton applicatif ; StrictMode remonte
+      // le composant en dev et provoquait des EPIPE sur le proxy WS Vite.
+      wsClient.onOpen = null
+      wsClient.onClose = null
+      wsClient.onError = null
+      wsClient.onMessage = null
     }
   }, [])
 
