@@ -13,4 +13,4 @@ WORKDIR /app
 COPY --from=build /workspace/app/backend/target/backend-*.jar /app/app.jar
 
 EXPOSE 4784
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["sh", "-c", "echo \"[backend] version=${BACKEND_VERSION:-dev}\"; exec java -jar /app/app.jar"]

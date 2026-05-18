@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     environment:
       APP_ALLOWED_ORIGINS: "${APP_ALLOWED_ORIGINS:-*}"
+      BACKEND_VERSION: "${BACKEND_VERSION:-1.0.0}"
     expose:
       - "4784"
 
@@ -16,6 +17,8 @@ services:
       dockerfile: app/frontend/Dockerfile
     container_name: bataille-navale-frontend
     restart: unless-stopped
+    environment:
+      FRONTEND_VERSION: "${FRONTEND_VERSION:-1.0.0}"
     depends_on:
       - backend
     ports:
