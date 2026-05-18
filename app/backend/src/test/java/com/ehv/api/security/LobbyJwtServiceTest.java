@@ -17,10 +17,10 @@ class LobbyJwtServiceTest {
     @Test
     void shouldIssueAndValidateTokenForLobbyAndPlayer() {
         LobbyJwtService service = new LobbyJwtService("0123456789abcdef0123456789abcdef");
-        String token = service.issueToken("my-game", 2);
+        String token = service.issueToken("ab12", 2);
         assertNotNull(token);
-        assertTrue(service.isValidForLobby(token, "my-game", 2));
-        assertFalse(service.isValidForLobby(token, "other-game", 2));
-        assertFalse(service.isValidForLobby(token, "my-game", 1));
+        assertTrue(service.isValidForLobby(token, "ab12", 2));
+        assertFalse(service.isValidForLobby(token, "cd34", 2));
+        assertFalse(service.isValidForLobby(token, "ab12", 1));
     }
 }

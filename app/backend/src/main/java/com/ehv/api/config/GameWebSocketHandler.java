@@ -9,25 +9,27 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Component;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
-import com.ehv.api.service.DuelGameService;
-import com.ehv.api.service.LobbyGameRegistry;
-import com.ehv.api.view.GameStateResponse;
-import com.ehv.api.view.DuelPhase;
+
+import com.ehv.api.lobby.LobbyGameId;
 import com.ehv.api.security.LobbyJwtService;
+import com.ehv.api.service.LobbyGameRegistry;
+import com.ehv.api.session.GameSession;
+import com.ehv.api.view.DuelPhase;
+import com.ehv.api.view.GameStateResponse;
 
 @Component
 public class GameWebSocketHandler extends TextWebSocketHandler {
@@ -119,7 +121,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        String normalizedGameId = gameId.strip().toLowerCase();
+        String normalizedGameId = LobbyGameId.normalize(gameId);
+        if (normalizedGameId == null) {
+            send(session, Map.of(
+                "type", "ERROR",
+                "message", "Invalid gameId. Expected 4 letters or digits (example: a3f9)."));
+            return;
+        }
         LOG.info("LOBBY_JOIN_ATTEMPT sessionId={} gameId={}", session.getId(), normalizedGameId);
         String resumeToken = msg.has("resumeToken") ? msg.get("resumeToken").getAsString() : null;
         Integer preferredPlayerNumber = null;
@@ -177,7 +185,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
         String gameStatus = "NOT_STARTED";
         String playerResult = "PENDING";
-        DuelGameService lobbyGame = lobbyGameRegistry.getLobbyIfPresent(game.getGameId());
+        GameSession lobbyGame = lobbyGameRegistry.getLobbyIfPresent(game.getGameId());
         if (lobbyGame != null) {
             try {
                 GameStateResponse state = lobbyGame.getStateForPlayer(playerNumber);
@@ -452,20 +460,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     }
 
     private GameSessionManager.LobbyConfigSnapshot parseLobbyConfig(JsonObject msg) {
-        int boardSize = msg.has("boardSize") ? msg.get("boardSize").getAsInt() : 10;
-        int playerCount = msg.has("playerCount") ? msg.get("playerCount").getAsInt() : 2;
-        int humanPlayers = msg.has("humanPlayers") ? msg.get("humanPlayers").getAsInt() : playerCount;
-        int aiPlayers = msg.has("aiPlayers") ? msg.get("aiPlayers").getAsInt() : Math.max(0, playerCount - humanPlayers);
-        int fleetShipCount = msg.has("fleetShipCount") ? msg.get("fleetShipCount").getAsInt() : 5;
-        int fleetTotalCells = msg.has("fleetTotalCells") ? msg.get("fleetTotalCells").getAsInt() : 17;
-        return new GameSessionManager.LobbyConfigSnapshot(
-            boardSize,
-            playerCount,
-            humanPlayers,
-            aiPlayers,
-            fleetShipCount,
-            fleetTotalCells
-        ).normalized();
+        return LobbyConfigPayloads.parse(msg);
     }
 
     private void sendLobbyConfigSnapshot(WebSocketSession session, String gameId) throws Exception {
@@ -473,32 +468,14 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         if (snapshot == null) {
             return;
         }
-        send(session, Map.of(
-            "type", "LOBBY_CONFIG_UPDATED",
-            "gameId", gameId,
-            "boardSize", snapshot.boardSize(),
-            "playerCount", snapshot.playerCount(),
-            "humanPlayers", snapshot.humanPlayers(),
-            "aiPlayers", snapshot.aiPlayers(),
-            "fleetShipCount", snapshot.fleetShipCount(),
-            "fleetTotalCells", snapshot.fleetTotalCells()
-        ));
+        send(session, LobbyConfigPayloads.serialize(gameId, snapshot));
     }
 
     private void broadcastLobbyConfigSnapshot(
             GameSessionManager.GameSession game,
             GameSessionManager.LobbyConfigSnapshot snapshot,
             String gameId) throws Exception {
-        broadcastToGame(game, Map.of(
-            "type", "LOBBY_CONFIG_UPDATED",
-            "gameId", gameId,
-            "boardSize", snapshot.boardSize(),
-            "playerCount", snapshot.playerCount(),
-            "humanPlayers", snapshot.humanPlayers(),
-            "aiPlayers", snapshot.aiPlayers(),
-            "fleetShipCount", snapshot.fleetShipCount(),
-            "fleetTotalCells", snapshot.fleetTotalCells()
-        ));
+        broadcastToGame(game, LobbyConfigPayloads.serialize(gameId, snapshot));
     }
 
     private void send(WebSocketSession session, Map<String, Object> payload) throws Exception {

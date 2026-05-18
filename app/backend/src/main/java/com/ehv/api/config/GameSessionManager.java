@@ -4,11 +4,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
+
+import com.ehv.api.lobby.LobbyGameId;
 
 @Component
 public class GameSessionManager {
@@ -27,15 +28,21 @@ public class GameSessionManager {
     private final Map<String, LobbyConfigSnapshot> lobbyConfigByGameId = new ConcurrentHashMap<>();
 
     private static String normalizeGameId(String gameId) {
-        if (gameId == null) {
-            return null;
+        return LobbyGameId.normalize(gameId);
+    }
+
+    private String allocateGameId() {
+        for (int attempt = 0; attempt < 64; attempt++) {
+            String candidate = LobbyGameId.generate();
+            if (!games.containsKey(candidate)) {
+                return candidate;
+            }
         }
-        String normalized = gameId.strip().toLowerCase();
-        return normalized.isEmpty() ? null : normalized;
+        throw new IllegalStateException("Unable to allocate a unique lobby game id");
     }
 
     public GameSession createGame(int maxPlayers, WebSocketSession hostSession) {
-        String gameId = normalizeGameId(UUID.randomUUID().toString());
+        String gameId = allocateGameId();
         GameSession session = new GameSession(gameId, maxPlayers, hostSession.getId());
         games.put(gameId, session);
         session.bindPlayer(1, hostSession);

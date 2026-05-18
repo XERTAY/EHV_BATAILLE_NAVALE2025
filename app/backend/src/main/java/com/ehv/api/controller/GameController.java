@@ -1,13 +1,13 @@
 package com.ehv.api.controller;
 
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,20 +19,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ehv.api.config.GameWebSocketHandler;
 import com.ehv.api.config.GameSessionManager;
+import com.ehv.api.config.GameWebSocketHandler;
+import com.ehv.api.dto.ConfirmPlacementRequest;
+import com.ehv.api.dto.LoadGameFromFileRequest;
 import com.ehv.api.dto.FireRequest;
 import com.ehv.api.dto.PlaceShipRequest;
-import com.ehv.api.dto.ConfirmPlacementRequest;
 import com.ehv.api.dto.RemoveShipRequest;
 import com.ehv.api.dto.ResetGameRequest;
-import com.ehv.api.service.DuelGameService;
-import com.ehv.api.service.LobbyGameRegistry;
 import com.ehv.api.security.LobbyJwtService;
+import com.ehv.api.service.LobbyGameRegistry;
+import com.ehv.api.session.GameSession;
 import com.ehv.api.view.ActionResponse;
+import com.ehv.api.view.DuelPhase;
 import com.ehv.api.view.ErrorResponse;
 import com.ehv.api.view.GameStateResponse;
-import com.ehv.api.view.DuelPhase;
+import com.ehv.api.view.SaveGameResponse;
 
 @RestController
 @RequestMapping("/api")
@@ -57,7 +59,7 @@ public class GameController {
         this.localDebugEndpointsEnabled = localDebugEndpointsEnabled;
     }
 
-    private DuelGameService game(String lobbyGameId) {
+    private GameSession game(String lobbyGameId) {
         return lobbyGameRegistry.forLobbyOrLocal(lobbyGameId);
     }
 
@@ -204,15 +206,9 @@ public class GameController {
             LOG.info("GAME_RESET scope={} defaults=true", hasLobbyGameId(scope) ? scope : "local");
         }
         if (request != null && request.boardSize() > 0 && request.fleetShipSizes() != null && !request.fleetShipSizes().isEmpty()) {
-            return game(scope).resetAndGetState(
-                request.boardSize(),
-                request.fleetShipSizes(),
-                request.playerCount(),
-                request.withAI(),
-                request.humanPlayers()
-            );
+            return game(scope).reset(request);
         }
-        return game(scope).resetAndGetState();
+        return game(scope).resetDefaults();
     }
 
     @GetMapping("/game/state")
@@ -268,7 +264,7 @@ public class GameController {
     @PostMapping("/game/auto-place")
     public GameStateResponse autoPlace() {
         ensureLocalDebugEndpointsEnabled();
-        return game(null).autoPlaceFleetForBothPlayers();
+        return game(null).autoPlaceFleet();
     }
 
     @PostMapping("/game/fire")
@@ -306,15 +302,27 @@ public class GameController {
     }
 
     @PostMapping("/game/load")
-    public GameStateResponse load(@RequestParam(value = "file", defaultValue = "bataille-navale") String fileName) {
+    public GameStateResponse load(
+            @RequestParam(value = "file", defaultValue = "bataille-navale") String fileName,
+            @RequestParam(value = "gameId", required = false) String gameId) {
         ensureLocalDebugEndpointsEnabled();
-        return game(null).loadGame(fileName);
+        return game(gameId).loadGame(fileName);
+    }
+
+    @PostMapping("/game/load-file")
+    public GameStateResponse loadFromUploadedFile(@RequestBody LoadGameFromFileRequest request) {
+        if (request == null || request.content() == null || request.content().isBlank()) {
+            throw new IllegalArgumentException("Contenu de sauvegarde manquant");
+        }
+        return game(request.gameId()).loadGameFromContent(request.content());
     }
 
     @PostMapping("/game/save")
-    public GameStateResponse save(@RequestParam(value = "file", defaultValue = "bataille-navale") String fileName) {
+    public SaveGameResponse save(
+            @RequestParam(value = "file", defaultValue = "bataille-navale") String fileName,
+            @RequestParam(value = "gameId", required = false) String gameId) {
         ensureLocalDebugEndpointsEnabled();
-        return game(null).saveGame(fileName);
+        return game(gameId).saveGame(fileName);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

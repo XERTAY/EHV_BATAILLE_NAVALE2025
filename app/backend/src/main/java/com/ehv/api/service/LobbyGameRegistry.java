@@ -4,24 +4,30 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Component;
 
+import com.ehv.api.lobby.LobbyGameId;
+import com.ehv.api.session.GameSession;
+
 /**
- * Une instance de jeu HTTP par salon (UUID WebSocket). Sans {@code gameId}, une partie locale
+ * Une instance de jeu HTTP par salon (identifiant court WebSocket). Sans {@code gameId}, une partie locale
  * partagée sert aux modes hors-ligne/hotseat (comportement historique du backend unique).
+ *
+ * <p>Le registre n'a aucune connaissance des règles : il distribue des {@link GameSession}
+ * qui délèguent au contrôleur legacy.
  */
 @Component
 public final class LobbyGameRegistry {
 
-    private final DuelGameService sharedLocalGame = new DuelGameService();
-    private final ConcurrentHashMap<String, DuelGameService> lobbyGames = new ConcurrentHashMap<>();
+    private final GameSession sharedLocalGame = new GameSession();
+    private final ConcurrentHashMap<String, GameSession> lobbyGames = new ConcurrentHashMap<>();
 
-    public DuelGameService forLobbyOrLocal(String lobbyGameId) {
+    public GameSession forLobbyOrLocal(String lobbyGameId) {
         if (lobbyGameId == null || lobbyGameId.isBlank()) {
             return sharedLocalGame;
         }
-        return lobbyGames.computeIfAbsent(normalizeLobbyId(lobbyGameId), key -> new DuelGameService());
+        return lobbyGames.computeIfAbsent(normalizeLobbyId(lobbyGameId), key -> new GameSession());
     }
 
-    public DuelGameService getLobbyIfPresent(String lobbyGameId) {
+    public GameSession getLobbyIfPresent(String lobbyGameId) {
         String normalized = normalizeLobbyId(lobbyGameId);
         if (normalized == null) {
             return null;
@@ -42,9 +48,6 @@ public final class LobbyGameRegistry {
     }
 
     private static String normalizeLobbyId(String lobbyGameId) {
-        if (lobbyGameId == null || lobbyGameId.isBlank()) {
-            return null;
-        }
-        return lobbyGameId.strip().toLowerCase();
+        return LobbyGameId.normalize(lobbyGameId);
     }
 }

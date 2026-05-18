@@ -13,6 +13,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.ehv.api.lobby.LobbyGameId;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -106,7 +107,8 @@ public class LobbyJwtService {
     }
 
     private static String normalize(String rawGameId) {
-        return rawGameId == null ? "" : rawGameId.strip().toLowerCase();
+        String normalized = LobbyGameId.normalize(rawGameId);
+        return normalized == null ? "" : normalized;
     }
 
     private String sign(String input) {
