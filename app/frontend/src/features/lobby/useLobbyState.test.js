@@ -35,7 +35,7 @@ describe('applyLobbyConfigUpdate', () => {
   it('initialise le lobby depuis LOBBY_CONFIG_UPDATED si GAME_CREATED manque', () => {
     const result = applyLobbyConfigUpdate(baseLobbyState, {
       type: 'LOBBY_CONFIG_UPDATED',
-      gameId: 'dcc7f8b1-9fa3-4167-a089-494138cc1757',
+      gameId: 'a3f9',
       boardSize: 12,
       playerCount: 4,
       humanPlayers: 2,
@@ -45,17 +45,38 @@ describe('applyLobbyConfigUpdate', () => {
     }, 2)
 
     expect(result.inLobby).toBe(true)
-    expect(result.gameId).toBe('dcc7f8b1-9fa3-4167-a089-494138cc1757')
+    expect(result.gameId).toBe('a3f9')
     expect(result.maxPlayers).toBe(4)
     expect(result.lobbyConfigPreview.playerCount).toBe(4)
     expect(result.lobbyConfigPreview.aiPlayers).toBe(2)
+  })
+
+  it('tolere un etat lobby partiel sans lobbyConfigPreview', () => {
+    const partialReset = {
+      inLobby: false,
+      isHost: false,
+      gameId: null,
+      players: 0,
+      maxPlayers: 0,
+      playerNumber: 1,
+    }
+
+    const result = applyLobbyConfigUpdate(partialReset, {
+      type: 'LOBBY_CONFIG_UPDATED',
+      gameId: 'a3f9',
+      boardSize: 12,
+      playerCount: 2,
+    }, 2)
+
+    expect(result.lobbyConfigPreview.boardSize).toBe(12)
+    expect(result.inLobby).toBe(true)
   })
 
   it('ignore une config d un autre lobby quand un gameId est deja actif', () => {
     const current = {
       ...baseLobbyState,
       inLobby: true,
-      gameId: '11111111-1111-1111-1111-111111111111',
+      gameId: 'ab12',
       maxPlayers: 2,
       lobbyConfigPreview: {
         ...baseLobbyState.lobbyConfigPreview,
@@ -65,7 +86,7 @@ describe('applyLobbyConfigUpdate', () => {
 
     const result = applyLobbyConfigUpdate(current, {
       type: 'LOBBY_CONFIG_UPDATED',
-      gameId: '22222222-2222-2222-2222-222222222222',
+      gameId: 'cd34',
       boardSize: 20,
       playerCount: 4,
     }, 2)

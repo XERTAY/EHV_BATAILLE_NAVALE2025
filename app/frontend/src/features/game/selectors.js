@@ -97,7 +97,18 @@ export function getIsDuelWithAi(gameState) {
   return aiCount === 1
 }
 
-function buildPlacementOverlayLabel({ lobbyInLobby, isDuelWithAi, currentIsAi, remainingShipsCount, isLocalTurn, currentPlayer }) {
+function buildPlacementOverlayLabel({
+  lobbyInLobby,
+  isDuelWithAi,
+  currentIsAi,
+  remainingShipsCount,
+  isLocalTurn,
+  currentPlayer,
+  localPlacementLocked,
+}) {
+  if (localPlacementLocked) {
+    return 'En attente des autres joueurs ou des IA...'
+  }
   if (lobbyInLobby && !isDuelWithAi) {
     return 'Placez vos navires puis validez votre flotte.'
   }

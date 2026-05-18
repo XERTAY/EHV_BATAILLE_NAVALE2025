@@ -13,6 +13,7 @@ export default function MenuScreen({
   onCreateLobby,
   onJoinLobby,
   onRefreshSaves,
+  onLoadFromSaveFile,
   onLeaveLobby,
   onUpdateLobbyConfig,
   loading,
@@ -31,6 +32,7 @@ export default function MenuScreen({
       onCreateLobby={onCreateLobby}
       onJoinLobby={onJoinLobby}
       onRefreshSaves={onRefreshSaves}
+      onLoadFromSaveFile={onLoadFromSaveFile}
       onLeaveLobby={onLeaveLobby}
       onUpdateLobbyConfig={onUpdateLobbyConfig}
       loading={loading}

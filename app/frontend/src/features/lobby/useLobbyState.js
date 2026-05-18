@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { LOBBY_SYNC_POLL_MS } from '@/constants/timings'
 
-const INITIAL_LOBBY_STATE = Object.freeze({
+export const INITIAL_LOBBY_STATE = Object.freeze({
   inLobby: false,
   isHost: false,
   gameId: null,
@@ -93,6 +93,7 @@ export function applyLobbyConfigUpdate(current, message, fallbackPlayerCount) {
   const shouldBootstrapLobby = !current.inLobby || !current.gameId
   const baseState = shouldBootstrapLobby
     ? {
+        ...INITIAL_LOBBY_STATE,
         ...current,
         inLobby: true,
         // Si `GAME_CREATED` est manque, on accepte le snapshot lobby comme source d'identite.
@@ -100,21 +101,26 @@ export function applyLobbyConfigUpdate(current, message, fallbackPlayerCount) {
         isHost: current.isHost || Number(current.playerNumber ?? 1) === 1,
         players: safePositiveNumber(current.players, 1),
         maxPlayers: safePositiveNumber(current.maxPlayers, inferredPlayerCount),
+        opponentPresence: current.opponentPresence ?? INITIAL_LOBBY_STATE.opponentPresence,
+        gameplaySync: current.gameplaySync ?? INITIAL_LOBBY_STATE.gameplaySync,
+        lobbyConfigPreview: current.lobbyConfigPreview ?? INITIAL_LOBBY_STATE.lobbyConfigPreview,
       }
     : current
+
+  const preview = baseState.lobbyConfigPreview ?? INITIAL_LOBBY_STATE.lobbyConfigPreview
 
   return {
     ...baseState,
     maxPlayers: inferredPlayerCount,
     lobbyConfigPreview: {
-      boardSize: safePositiveNumber(message.boardSize, baseState.lobbyConfigPreview.boardSize),
-      playerCount: safePositiveNumber(message.playerCount, baseState.lobbyConfigPreview.playerCount),
-      humanPlayers: safePositiveNumber(message.humanPlayers, baseState.lobbyConfigPreview.humanPlayers),
+      boardSize: safePositiveNumber(message.boardSize, preview.boardSize),
+      playerCount: safePositiveNumber(message.playerCount, preview.playerCount),
+      humanPlayers: safePositiveNumber(message.humanPlayers, preview.humanPlayers),
       aiPlayers: Number.isFinite(Number(message.aiPlayers))
         ? Math.max(0, Number(message.aiPlayers))
-        : baseState.lobbyConfigPreview.aiPlayers,
-      fleetShipCount: safePositiveNumber(message.fleetShipCount, baseState.lobbyConfigPreview.fleetShipCount),
-      fleetTotalCells: safePositiveNumber(message.fleetTotalCells, baseState.lobbyConfigPreview.fleetTotalCells),
+        : preview.aiPlayers,
+      fleetShipCount: safePositiveNumber(message.fleetShipCount, preview.fleetShipCount),
+      fleetTotalCells: safePositiveNumber(message.fleetTotalCells, preview.fleetTotalCells),
     },
   }
 }

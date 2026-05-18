@@ -1,57 +1,19 @@
 import { useCallback } from 'react'
 
 import { BOARD_ID_TO_PLAYER } from '@/constants/game'
+import { INITIAL_LOBBY_STATE } from '@/features/lobby/useLobbyState'
 import { normalizeSetup } from '@/utils/setupNormalization'
+import { downloadTextFile } from '@/utils/downloadTextFile'
 
-const PHASE_PLACEMENT = 'PLACEMENT'
-const PHASE_BATTLE = 'BATTLE'
-const PHASE_GAME_OVER = 'GAME_OVER'
-
-const RESET_LOBBY_STATE = Object.freeze({
-  inLobby: false,
-  isHost: false,
-  gameId: null,
-  players: 0,
-  maxPlayers: 0,
-  playerNumber: 1,
-})
-
-const LOBBY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const PLAYER_TO_BOARD_ID = Object.freeze({
-  1: 'A1',
-  2: 'B1',
-  3: 'C1',
-  4: 'D1',
-})
-
-function isPlacementAlreadyConfirmedError(error) {
-  const message = String(error?.message ?? '').toLowerCase()
-  return message.includes('placement deja valide')
-}
-
-function buildPlacementOffsets({ orientation, x, y, shipLength }) {
-  if (orientation === 'EAST') return { x, y, orientation: 'HORIZONTAL' }
-  if (orientation === 'SOUTH') return { x, y, orientation: 'VERTICAL' }
-  if (orientation === 'WEST') return { x: x - (shipLength - 1), y, orientation: 'HORIZONTAL' }
-  return { x, y: y - (shipLength - 1), orientation: 'VERTICAL' }
-}
-
-function buildBattleOutcomeStatus({ result, targetLabel }) {
-  if (result.state.phase === PHASE_GAME_OVER) {
-    return `Joueur ${result.state.winner} gagne. Dernier tir ${targetLabel}: ${result.result}.`
-  }
-  return `Tir ${targetLabel}: ${result.result}. Tour du joueur ${result.state.currentPlayer}.`
-}
-
-function buildPlacementOutcomeStatus({ result, boardId, label, selectedShipLabel }) {
-  if (result.state.phase === PHASE_BATTLE) {
-    const n = result.state.boards?.length ?? 0
-    return n > 2
-      ? 'Tous les navires sont places. Debut de la bataille, joueur 1. Cliquez sur une grille adverse encore en jeu pour tirer.'
-      : 'Tous les navires sont places. Debut de la bataille, joueur 1.'
-  }
-  return `Navire ${selectedShipLabel} place sur ${boardId} ${label}. Joueur ${result.state.currentPlayer} continue.`
-}
+import {
+  PHASE_BATTLE,
+  PHASE_PLACEMENT,
+  PLAYER_TO_BOARD_ID,
+  buildBattleOutcomeStatus,
+  buildPlacementOffsets,
+  buildPlacementOutcomeStatus,
+  isPlacementAlreadyConfirmedError,
+} from './gameActionHelpers'
 
 /**
  * Regroupe l'ensemble des actions metier exposees a l'UI : demarrage de partie,
@@ -77,6 +39,7 @@ export default function useGameActions({
     placeShipAction,
     fireAtAction,
     loadGameAction,
+    loadGameFromFileAction,
     saveGameAction,
     refreshStateAction,
     refreshSaves,
@@ -134,7 +97,7 @@ export default function useGameActions({
 
     try {
       setStatusMessage('Demarrage de la partie...')
-      if (!keepLobby) setLobbyState(RESET_LOBBY_STATE)
+      if (!keepLobby) setLobbyState(INITIAL_LOBBY_STATE)
 
       if (effectiveSetup.startMode === 'load') {
         const loaded = await loadGameAction(effectiveSetup.loadSaveFile)
@@ -165,6 +128,26 @@ export default function useGameActions({
     }
   }, [setup, bootstrapGame, loadGameAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage])
 
+  const handleLoadFromSaveFile = useCallback(async (fileContent) => {
+    if (!fileContent?.trim()) {
+      setStatusMessage('Fichier de sauvegarde vide.')
+      return
+    }
+    try {
+      setStatusMessage('Chargement du fichier...')
+      setLobbyState(INITIAL_LOBBY_STATE)
+      const loaded = await loadGameFromFileAction(fileContent)
+      setLayoutSet(loaded?.boards?.length === 4 ? 'star4' : 'faceoff')
+      setLocalPlacementWaiting(false)
+      resetPlacement()
+      setScreen('game')
+      setStatusMessage('Partie chargee depuis le fichier .save.')
+    } catch (error) {
+      setScreen('menu')
+      setStatusMessage(error?.message ? `Chargement impossible: ${error.message}` : 'Chargement impossible.')
+    }
+  }, [loadGameFromFileAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage])
+
   const enterGameScreenWithState = useCallback((state, status) => {
     const playerCountFromState = state?.boards?.length === 4 ? 4 : 2
     setLayoutSet(playerCountFromState === 4 ? 'star4' : 'faceoff')
@@ -176,13 +159,18 @@ export default function useGameActions({
 
   const handleSaveCurrentGame = useCallback(async () => {
     try {
-      await saveGameAction(setup.saveFileName)
+      const lobbyGameId = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+      const response = await saveGameAction(setup.saveFileName, lobbyGameId)
+      const fileName = response?.fileName ?? `${setup.saveFileName}.save`
+      if (response?.content) {
+        downloadTextFile(response.content, fileName)
+      }
       await refreshSaves()
-      setStatusMessage(`Partie enregistree dans saves/${setup.saveFileName}.save`)
+      setStatusMessage(`Partie enregistree (${fileName}) — fichier telecharge et copie serveur dans saves/.`)
     } catch {
       // L'erreur est geree dans le hook API.
     }
-  }, [saveGameAction, setup.saveFileName, refreshSaves, setStatusMessage])
+  }, [saveGameAction, setup.saveFileName, refreshSaves, setStatusMessage, lobbyState.inLobby, lobbyState.gameId])
 
   const handleBackToMenu = useCallback(() => {
     setLocalPlacementWaiting(false)
@@ -339,10 +327,21 @@ export default function useGameActions({
     try {
       const payload = { player: localPlayerNumber }
       if (lobbyState.inLobby && lobbyState.gameId) payload.gameId = lobbyState.gameId
-      await confirmPlacementAction(payload)
-      setLocalPlacementWaiting(true)
-      setStatusMessage('Placement valide. En attente des autres joueurs...')
+      const result = await confirmPlacementAction(payload)
+      if (result?.state?.phase === PHASE_BATTLE) {
+        setLocalPlacementWaiting(false)
+        setStatusMessage('Tous les joueurs sont prets. Debut de la bataille.')
+      } else {
+        setLocalPlacementWaiting(true)
+        setStatusMessage('Placement valide. En attente des autres joueurs...')
+      }
       setRemovalModeEnabled(false)
+      const lobbyScope = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+      try {
+        await refreshStateAction(localPlayerNumber, lobbyScope)
+      } catch {
+        // Deja gere dans le hook API.
+      }
     } catch (error) {
       // Si le backend indique que le placement est deja valide, on force une
       // resynchronisation d'etat pour remettre l'UI en phase.
@@ -352,12 +351,18 @@ export default function useGameActions({
       }
       const lobbyScope = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
       try {
-        await refreshStateAction(localPlayerNumber, lobbyScope)
+        const synced = await refreshStateAction(localPlayerNumber, lobbyScope)
+        if (synced?.phase === PHASE_BATTLE) {
+          setLocalPlacementWaiting(false)
+          setStatusMessage('Tous les joueurs sont prets. Debut de la bataille.')
+        } else {
+          setLocalPlacementWaiting(true)
+          setStatusMessage('Placement deja valide. En attente des autres joueurs...')
+        }
       } catch {
-        // L'erreur de sync est deja geree dans le hook API.
+        setLocalPlacementWaiting(true)
+        setStatusMessage('Placement deja valide. En attente des autres joueurs...')
       }
-      setLocalPlacementWaiting(true)
-      setStatusMessage('Placement deja valide. En attente des autres joueurs...')
       setRemovalModeEnabled(false)
     }
   }, [
@@ -386,73 +391,14 @@ export default function useGameActions({
     lobbyState.inLobby, lobbyState.gameId, setStatusMessage,
   ])
 
-  const handleCreateLobby = useCallback((maxPlayers) => {
-    ws.createGame(maxPlayers)
-  }, [ws])
-
-  const handleJoinLobby = useCallback((gameId, intent = 'manual') => {
-    const normalized = gameId?.trim()?.toLowerCase()
-    if (!normalized) return
-    if (normalized.includes('…') || normalized.includes('...')) {
-      setStatusMessage('ID de lobby tronque detecte. Utilisez l ID complet copie depuis "Copier l ID".')
-      return
-    }
-    if (!LOBBY_ID_PATTERN.test(normalized)) {
-      setStatusMessage('ID de lobby invalide. Format attendu: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.')
-      return
-    }
-    ws.joinGame(normalized, intent)
-  }, [setStatusMessage, ws])
-
-  const handleLeaveLobby = useCallback(() => {
-    ws.leaveGame()
-    setLobbyState(RESET_LOBBY_STATE)
-    setStatusMessage('Lobby quitte.')
-  }, [setLobbyState, setStatusMessage, ws])
-
-  const handleStartLobbyGame = useCallback(async (setupPatch = {}) => {
-    const fallbackLobbyGameId = ws?.wsState?.gameId ?? null
-    const lobbyGameId = lobbyState.gameId ?? fallbackLobbyGameId
-    const lobbyPlayerNumber = Number(lobbyState.playerNumber ?? ws?.wsState?.playerNumber ?? 1) || 1
-    const isHostLike = lobbyState.isHost || lobbyPlayerNumber === 1
-    if (!isHostLike || !lobbyGameId) {
-      setStatusMessage('Creation du lobby en cours: identifiant de partie non recu.')
-      return
-    }
-    try {
-      const requestedPlayerCount = Number(setupPatch.playerCount ?? setup.playerCount) || 2
-      const clampedPlayerCount = requestedPlayerCount === 4 ? 4 : 2
-      const connectedHumans = Math.max(1, Math.min(Number(lobbyState.players) || 1, clampedPlayerCount))
-      const normalizedLobbyPatch = {
-        ...setupPatch,
-        playerCount: clampedPlayerCount,
-        withAI: connectedHumans < clampedPlayerCount,
-        humanPlayers: connectedHumans < clampedPlayerCount ? connectedHumans : clampedPlayerCount,
-      }
-      await handleStartGame({
-        keepLobby: true,
-        startMode: 'new',
-        setupPatch: normalizedLobbyPatch,
-        lobbyGameId,
-        bootstrapViewerPlayer: lobbyPlayerNumber,
-      })
-      ws.startGame(lobbyGameId)
-    } catch {
-      // L'erreur est deja geree dans handleStartGame.
-    }
-  }, [handleStartGame, lobbyState.isHost, lobbyState.gameId, lobbyState.playerNumber, lobbyState.players, setStatusMessage, setup.playerCount, ws])
-
   return {
     handleStartGame,
+    handleLoadFromSaveFile,
     enterGameScreenWithState,
     handleSaveCurrentGame,
     handleBackToMenu,
     handleCellClick,
     handleConfirmPlacement,
     handleRemoveSelectedShip,
-    handleCreateLobby,
-    handleJoinLobby,
-    handleLeaveLobby,
-    handleStartLobbyGame,
   }
 }

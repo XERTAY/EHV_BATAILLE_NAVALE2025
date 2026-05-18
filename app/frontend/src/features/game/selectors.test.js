@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getBoardStatesById } from './selectors'
+import { getBoardStatesById, getTurnOverlayLabel } from './selectors'
 
 describe('getBoardStatesById', () => {
   it('masks enemy SHIP cells during battle', () => {
@@ -24,5 +24,36 @@ describe('getBoardStatesById', () => {
 
     const result = getBoardStatesById({ gameState, delayedOwnBoardCells: null, gamePhase: 'GAME_OVER' })
     expect(result.B1.cells[0][0]).toBe('SHIP')
+  })
+})
+
+describe('getTurnOverlayLabel', () => {
+  const basePlacement = {
+    gamePhase: 'PLACEMENT',
+    lobbyInLobby: true,
+    isDuelWithAi: false,
+    currentIsAi: false,
+    remainingShipsCount: 0,
+    isLocalTurn: true,
+    currentPlayer: 1,
+    isGameOver: false,
+    didLocalPlayerWin: false,
+  }
+
+  it('shows waiting message after local fleet is validated in lobby', () => {
+    const label = getTurnOverlayLabel({
+      ...basePlacement,
+      localPlacementLocked: true,
+    })
+    expect(label).toBe('En attente des autres joueurs ou des IA...')
+  })
+
+  it('shows placement instructions before validation in lobby', () => {
+    const label = getTurnOverlayLabel({
+      ...basePlacement,
+      localPlacementLocked: false,
+      remainingShipsCount: 2,
+    })
+    expect(label).toBe('Placez vos navires puis validez votre flotte.')
   })
 })

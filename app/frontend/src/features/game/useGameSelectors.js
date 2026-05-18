@@ -29,7 +29,7 @@ import {
  *   layoutSet: 'faceoff' | 'star4',
  *   setup: object,
  *   delayedOwnBoardCells: ReadonlyArray<ReadonlyArray<unknown>> | null,
- *   placement: { remainingShipsCount: number, localPlacementLocked: boolean },
+ *   placement: { remainingShipsCount: number, localPlacementLocked: boolean (verrou ou attente post-validation) },
  *   shoot: { shootModeActive: boolean },
  * }} params
  */

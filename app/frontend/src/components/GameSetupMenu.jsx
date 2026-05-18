@@ -11,6 +11,7 @@ function GameSetupMenu({
   onCreateLobby,
   onJoinLobby,
   onRefreshSaves,
+  onLoadFromSaveFile,
   onLeaveLobby,
   onUpdateLobbyConfig,
   loading,
@@ -23,6 +24,9 @@ function GameSetupMenu({
   const [fleetModalOpen, setFleetModalOpen] = useState(false)
   const [joinGameId, setJoinGameId] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copier l ID')
+  const [pendingUploadName, setPendingUploadName] = useState('')
+  const [pendingUploadContent, setPendingUploadContent] = useState(null)
+  const uploadInputRef = useRef(null)
   const createLobbyRequestedRef = useRef(false)
   const totalShipCells = useMemo(() => {
     return setup.fleetShipSizes.reduce((sum, size) => sum + Number(size || 0), 0)
@@ -70,6 +74,28 @@ function GameSetupMenu({
 
   const launchLoadGame = () => {
     onStart({ startMode: 'load', setupPatch: setup })
+  }
+
+  const handleUploadFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      setPendingUploadName('')
+      setPendingUploadContent(null)
+      return
+    }
+    try {
+      const content = await file.text()
+      setPendingUploadName(file.name)
+      setPendingUploadContent(content)
+    } catch {
+      setPendingUploadName('')
+      setPendingUploadContent(null)
+    }
+  }
+
+  const launchUploadLoad = () => {
+    if (!pendingUploadContent?.trim() || !onLoadFromSaveFile) return
+    onLoadFromSaveFile(pendingUploadContent)
   }
   const humanSlotsRemaining = Math.max(0, setup.playerCount - 1 - effectiveAiPlayers)
   const shouldShareId = humanSlotsRemaining > 0
@@ -164,6 +190,15 @@ function GameSetupMenu({
       createLobbyRequestedRef.current = false
     }
   }, [menuStep, shouldShareId])
+
+  useEffect(() => {
+    if (menuStep === 'load') return
+    setPendingUploadName('')
+    setPendingUploadContent(null)
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = ''
+    }
+  }, [menuStep])
 
   useEffect(() => {
     if (lobby?.inLobby && !hostRole && menuStep !== 'online') {
@@ -302,7 +337,10 @@ function GameSetupMenu({
                   type="text"
                   value={joinGameId}
                   onChange={(event) => setJoinGameId(event.target.value)}
-                  placeholder="Collez l'ID ici"
+                  placeholder="ex: a3f9"
+                  maxLength={4}
+                  autoComplete="off"
+                  spellCheck={false}
                 />
               </div>
               <div className="menu-actions menu-actions--inline">
@@ -344,6 +382,36 @@ function GameSetupMenu({
           <div className="menu-stage menu-stage--panel">
             <article className="menu-card">
               <h2>Charger une sauvegarde</h2>
+              <p className="menu-start-note">
+                Televersez un fichier .save depuis votre ordinateur pour reprendre une partie.
+              </p>
+              <div className="menu-field-group">
+                <label htmlFor="upload-save-file">Fichier local (.save)</label>
+                <input
+                  id="upload-save-file"
+                  ref={uploadInputRef}
+                  type="file"
+                  accept=".save,application/json,text/plain"
+                  onChange={handleUploadFileChange}
+                  disabled={loading || !onLoadFromSaveFile}
+                />
+                {pendingUploadName ? (
+                  <span className="menu-start-note">Fichier selectionne: {pendingUploadName}</span>
+                ) : null}
+              </div>
+              <div className="menu-actions menu-actions--inline">
+                <button
+                  type="button"
+                  className="menu-button menu-button--primary"
+                  onClick={launchUploadLoad}
+                  disabled={loading || !pendingUploadContent?.trim() || !onLoadFromSaveFile}
+                >
+                  Charger le fichier televerse
+                </button>
+              </div>
+              <p className="menu-start-note">
+                Ou choisissez une sauvegarde deja presente sur le serveur.
+              </p>
               <div className="menu-field-group">
                 <label htmlFor="saved-game-file">Sauvegardes disponibles</label>
                 <select

@@ -14,6 +14,7 @@ import {
 } from '@/features/game/selectors'
 import useGameActions from '@/features/game/useGameActions'
 import useGameSelectors from '@/features/game/useGameSelectors'
+import useLobbyActions from '@/features/lobby/useLobbyActions'
 import useLobbyState from '@/features/lobby/useLobbyState'
 import usePlacementHotkeys from '@/features/placement/usePlacementHotkeys'
 import useSetupPersistence from '@/features/setup/useSetupPersistence'
@@ -63,12 +64,6 @@ export default function App() {
   const api = useGameApi()
   const ws = useWebSocketGame()
   const { gameState, loading, errorMessage, listSavesAction } = api
-
-  useEffect(() => {
-    // Etablit la socket des l'ouverture de l'app pour eviter un create lobby
-    // declenche trop tot (avant handshake CONNECTED).
-    ws.ensureConnected()
-  }, [ws.ensureConnected])
 
   const refreshSaves = useCallback(async () => {
     try {
@@ -151,12 +146,18 @@ export default function App() {
   const { lobbyState } = lobbyApi
 
   useEffect(() => {
+    if (gameState?.phase === 'BATTLE' || gameState?.phase === 'GAME_OVER') {
+      setLocalPlacementWaiting(false)
+    }
+  }, [gameState?.phase])
+
+  useEffect(() => {
     if (screen !== 'game' || !lobbyState?.inLobby || !lobbyState?.gameId) return undefined
     const beat = window.setInterval(() => {
       ws.send({ type: 'HEARTBEAT', gameId: lobbyState.gameId })
     }, 5000)
     return () => window.clearInterval(beat)
-  }, [screen, lobbyState?.inLobby, lobbyState?.gameId, ws])
+  }, [screen, lobbyState?.inLobby, lobbyState?.gameId, ws.send])
 
   // Mode tir : la `shouldOffer`/`isPlayerInShootMode` est calculee plus bas avec
   // les selecteurs ; ici on instancie le countdown avec les valeurs derivees.
@@ -175,7 +176,7 @@ export default function App() {
     delayedOwnBoardCells,
     placement: {
       remainingShipsCount: placement.remainingShips.length,
-      localPlacementLocked,
+      localPlacementLocked: localPlacementLockedOrWaiting,
     },
     shoot: { shootModeActive: shoot.shootModeActive },
     battleSubState,
@@ -265,7 +266,7 @@ export default function App() {
     onRotate: placement.rotatePlacementOrientationClockwise,
   })
 
-  const actions = useGameActions({
+  const gameActions = useGameActions({
     api: { ...api, refreshSaves },
     ui: {
       setScreen,
@@ -292,6 +293,16 @@ export default function App() {
     },
     onBattleAction: appendActionFeed,
   })
+
+  const lobbyActions = useLobbyActions({
+    ws: { ...ws, state: ws.wsState },
+    ui: { setStatusMessage },
+    setup,
+    lobby: { state: lobbyState, setLobbyState: lobbyApi.setLobbyState },
+    handleStartGame: gameActions.handleStartGame,
+  })
+
+  const actions = { ...gameActions, ...lobbyActions }
 
   useEffect(() => {
     if (ws.wsMessage?.type !== 'SHOT_RESOLVED') return
@@ -362,6 +373,7 @@ export default function App() {
         onCreateLobby={actions.handleCreateLobby}
         onJoinLobby={actions.handleJoinLobby}
         onRefreshSaves={refreshSaves}
+        onLoadFromSaveFile={actions.handleLoadFromSaveFile}
         onLeaveLobby={actions.handleLeaveLobby}
         onUpdateLobbyConfig={ws.updateLobbyConfig}
         loading={loading}
