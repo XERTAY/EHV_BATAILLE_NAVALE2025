@@ -138,16 +138,32 @@ export function listSaves() {
   return callApi('/game/saves')
 }
 
-export function loadGame(fileName) {
+export function loadGame(fileName, lobbyGameId = null) {
   const file = encodeURIComponent((fileName || 'bataille-navale').trim())
-  return callApi(`/game/load?file=${file}`, {
+  const gameIdParam = lobbyGameId ? `&gameId=${encodeURIComponent(String(lobbyGameId).trim())}` : ''
+  return callApi(`/game/load?file=${file}${gameIdParam}`, {
     method: 'POST',
+    authGameId: lobbyGameId,
   })
 }
 
-export function saveGame(fileName) {
-  const file = encodeURIComponent((fileName || 'bataille-navale').trim())
-  return callApi(`/game/save?file=${file}`, {
+export function loadGameFromFile(content, lobbyGameId = null) {
+  const body = { content }
+  if (lobbyGameId != null && String(lobbyGameId).trim() !== '') {
+    body.gameId = String(lobbyGameId).trim()
+  }
+  return callApi('/game/load-file', {
     method: 'POST',
+    body: JSON.stringify(body),
+    authGameId: lobbyGameId,
+  })
+}
+
+export function saveGame(fileName, lobbyGameId = null) {
+  const file = encodeURIComponent((fileName || 'bataille-navale').trim())
+  const gameIdParam = lobbyGameId ? `&gameId=${encodeURIComponent(String(lobbyGameId).trim())}` : ''
+  return callApi(`/game/save?file=${file}${gameIdParam}`, {
+    method: 'POST',
+    authGameId: lobbyGameId,
   })
 }

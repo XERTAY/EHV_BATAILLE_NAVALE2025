@@ -5,6 +5,7 @@ import {
   getGameState,
   listSaves,
   loadGame,
+  loadGameFromFile,
   placeShip,
   removePlacedShip,
   resetGame,
@@ -133,11 +134,26 @@ export default function useGameApi() {
     }
   }, [])
 
-  const loadGameAction = useCallback(async (fileName) => {
+  const loadGameFromFileAction = useCallback(async (content, lobbyGameId = null) => {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await loadGame(fileName)
+      const state = await loadGameFromFile(content, lobbyGameId)
+      applyGameState(setGameState, state)
+      return state
+    } catch (error) {
+      setErrorMessage(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadGameAction = useCallback(async (fileName, lobbyGameId = null) => {
+    try {
+      setLoading(true)
+      setErrorMessage('')
+      const state = await loadGame(fileName, lobbyGameId)
       applyGameState(setGameState, state)
       return state
     } catch (error) {
@@ -184,13 +200,14 @@ export default function useGameApi() {
     return state
   }, [])
 
-  const saveGameAction = useCallback(async (fileName) => {
+  const saveGameAction = useCallback(async (fileName, lobbyGameId = null) => {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await saveGame(fileName)
+      const response = await saveGame(fileName, lobbyGameId)
+      const state = response?.state ?? response
       applyGameState(setGameState, state)
-      return state
+      return response
     } catch (error) {
       setErrorMessage(error.message)
       throw error
@@ -210,6 +227,7 @@ export default function useGameApi() {
     fireAtAction,
     listSavesAction,
     loadGameAction,
+    loadGameFromFileAction,
     saveGameAction,
     refreshStateAction,
     syncStateAction,
