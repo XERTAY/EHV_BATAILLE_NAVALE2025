@@ -1,12 +1,12 @@
 package com.ehv.battleship.view;
 
+import java.util.List;
+
 import com.ehv.battleship.model.CellStatus;
 import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.Game;
 import com.ehv.battleship.model.Grid;
 import com.ehv.battleship.model.Player;
-
-import java.util.List;
 
 public class ConsoleRenderer {
 
@@ -14,7 +14,50 @@ public class ConsoleRenderer {
         if (grid == null) {
             throw new IllegalArgumentException("La grille ne peut pas être nulle");
         }
-        return grid.toTargetViewString();
+        int size = grid.getSize();
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("     ");
+        for (int col = 1; col <= size; col++) {
+            sb.append(col);
+            if (col < size) {
+                sb.append(" ");
+            }
+        }
+        sb.append(" ( x )");
+        sb.append(System.lineSeparator());
+
+        for (int rowDisplay = 1; rowDisplay <= size; rowDisplay++) {
+            int y = rowDisplay - 1;
+            if (rowDisplay < 10) {
+                sb.append(rowDisplay).append("  | ");
+            } else {
+                sb.append(rowDisplay).append(" | ");
+            }
+            for (int x = 0; x < size; x++) {
+                CellStatus status = grid.getCell(new Coordinate(x, y));
+                char symbol;
+                if (status == CellStatus.HIT) {
+                    symbol = 'X';
+                } else if (status == CellStatus.SUNK) {
+                    symbol = '#';
+                } else if (status == CellStatus.MISS) {
+                    symbol = '?';
+                } else {
+                    symbol = 'O';
+                }
+                sb.append(symbol);
+                if (x < size - 1) {
+                    sb.append(" ");
+                }
+            }
+            if (rowDisplay < size) {
+                sb.append(System.lineSeparator());
+            }
+        }
+        sb.append(System.lineSeparator());
+        sb.append("( y )");
+        return sb.toString();
     }
 
     public String renderPlayerTurn(Player current, Player target) {
@@ -63,10 +106,10 @@ public class ConsoleRenderer {
         if (grid == null) {
             throw new IllegalArgumentException("La grille ne peut pas être nulle");
         }
-        
+
         StringBuilder sb = new StringBuilder();
         int size = grid.getSize();
-        
+
         sb.append("     ");
         for (int col = 1; col <= size; col++) {
             sb.append(col);
@@ -76,21 +119,21 @@ public class ConsoleRenderer {
         }
         sb.append(" ( x )");
         sb.append(System.lineSeparator());
-        
+
         for (int rowDisplay = 1; rowDisplay <= size; rowDisplay++) {
             int y = rowDisplay - 1;
-            
+
             if (rowDisplay < 10) {
                 sb.append(rowDisplay).append("  | ");
             } else {
                 sb.append(rowDisplay).append(" | ");
             }
-            
+
             for (int x = 0; x < size; x++) {
                 Coordinate coord = new Coordinate(x, y);
                 CellStatus status = grid.getCell(coord);
                 char symbol;
-                
+
                 switch (status) {
                     case SHIP:
                         symbol = 'S';
@@ -108,13 +151,13 @@ public class ConsoleRenderer {
                         symbol = '~';
                         break;
                 }
-                
+
                 sb.append(symbol);
                 if (x < size - 1) {
                     sb.append(" ");
                 }
             }
-            
+
             if (rowDisplay < size) {
                 sb.append(System.lineSeparator());
             }
@@ -122,9 +165,7 @@ public class ConsoleRenderer {
 
         sb.append(System.lineSeparator());
         sb.append("( y )");
-        
+
         return sb.toString();
     }
 }
-
-

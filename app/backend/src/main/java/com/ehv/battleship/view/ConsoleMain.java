@@ -9,9 +9,9 @@ import com.ehv.battleship.legacy.controller.GameController;
 import com.ehv.battleship.model.AI;
 import com.ehv.battleship.model.Coordinate;
 import com.ehv.battleship.model.Game;
-import com.ehv.battleship.model.GamePersistence;
 import com.ehv.battleship.model.Player;
 import com.ehv.battleship.model.ShotResult;
+import com.ehv.battleship.persistence.GamePersistence;
 
 public class ConsoleMain {
 
@@ -22,12 +22,11 @@ public class ConsoleMain {
         ConsoleRenderer renderer = new ConsoleRenderer();
 
         System.out.println("=== Bataille navale - Mode console ===");
-        Game game;
+        GameController controller;
 
         boolean loadExistingGame = askStartMode(scanner);
         if (loadExistingGame) {
-            // Display available saves
-            java.io.File savesDir = new java.io.File("saves");
+            java.io.File savesDir = GamePersistence.savesDirectory().toFile();
             String[] saveFiles = savesDir.list();
             if (saveFiles != null && saveFiles.length > 0) {
                 System.out.println("Sauvegardes disponibles :");
@@ -35,22 +34,23 @@ public class ConsoleMain {
                     System.out.println("- " + file);
                 }
             } else {
-                System.out.println("Aucune sauvegarde disponible dans saves/. Veuillez en créer une ou entrer un chemin personnalisé.");
+                System.out.println("Aucune sauvegarde disponible dans saves/. Veuillez en créer une ou entrer un nom de fichier.");
             }
             while (true) {
-                System.out.print("Chemin de sauvegarde (Entrée pour défaut bataille-navale.save) : ");
+                System.out.print("Nom de sauvegarde (Entrée pour défaut bataille-navale) : ");
                 String input = scanner.nextLine().trim();
-                String savePath = input.isEmpty() ? "bataille-navale.save" : input;
+                String saveName = input.isEmpty() ? "bataille-navale" : input.replace(".save", "");
 
                 try {
-                    game = GamePersistence.load(savePath);
-                    System.out.println("Partie chargée depuis : " + savePath);
+                    controller = GameController.openFromSaveFile(saveName);
+                    System.out.println("Partie chargée depuis : saves/" + saveName + ".save");
                     break;
                 } catch (Exception e) {
                     System.out.println("Erreur de chargement : " + e.getMessage());
                 }
             }
         } else {
+            Game game;
             int gridSize = askGridSize(scanner);
             List<Integer> fleetShipSizes = askFleetConfiguration(scanner, gridSize);
             int totalPlayers = askTotalPlayerCount(scanner);
@@ -80,23 +80,23 @@ public class ConsoleMain {
             System.out.println("Coordonnées de 1 à " + configuredGridSize);
 
             for (int i = 0; i < placementController.getPlayers().size(); i++) {
-                 Player currentPlayer = placementController.getCurrentPlayer();
+                Player currentPlayer = placementController.getCurrentPlayer();
 
-                  if (currentPlayer instanceof AI) {
-                    ((AI) currentPlayer).placeFleetStandardTypes();
-                      System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
-                      System.out.println("\nGrille de " + currentPlayer.getName() + " après le placement :");
-                      System.out.println(renderer.renderPlayerGrid(currentPlayer.getGrid()));
-                                            placementController.endTurn();
-                  } else {
-                      placeFleetManually(scanner, renderer, placementController, currentPlayer, fleetShipSizes);
-                  }
-                  }
+                if (currentPlayer instanceof AI) {
+                    placementController.autoPlaceFleetForAI();
+                    System.out.println("\n" + currentPlayer.getName() + " a placé sa flotte automatiquement.");
+                    System.out.println("\nGrille de " + currentPlayer.getName() + " après le placement :");
+                    System.out.println(renderer.renderPlayerGrid(currentPlayer.getGrid()));
+                    placementController.endTurn();
+                } else {
+                    placeFleetManually(scanner, renderer, placementController, currentPlayer, fleetShipSizes);
+                }
+            }
 
             placementController.finishPlacementPhase();
+            controller = placementController;
         }
 
-        GameController controller = new GameController(game);
         int configuredGridSize = controller.getGridSize();
 
         System.out.println("\n=== DÉBUT DE LA PARTIE ===");
@@ -488,5 +488,3 @@ public class ConsoleMain {
         }
     }
 }
-
-
