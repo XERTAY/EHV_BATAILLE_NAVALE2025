@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyLobbyConfigUpdate } from './useLobbyState'
+import { applyLobbyConfigUpdate, resolveLobbyPlayerNumber } from './useLobbyState'
 
 const baseLobbyState = Object.freeze({
   inLobby: false,
@@ -29,6 +29,16 @@ const baseLobbyState = Object.freeze({
     targetPlayer: null,
     shot: null,
   },
+})
+
+describe('resolveLobbyPlayerNumber', () => {
+  it('priorise le numero WS apres JOINED_GAME', () => {
+    expect(resolveLobbyPlayerNumber({ inLobby: true, playerNumber: 1 }, 2)).toBe(2)
+  })
+
+  it('retombe sur le lobby React si le WS est absent', () => {
+    expect(resolveLobbyPlayerNumber({ inLobby: true, playerNumber: 2 }, null)).toBe(2)
+  })
 })
 
 describe('applyLobbyConfigUpdate', () => {

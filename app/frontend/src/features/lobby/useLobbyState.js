@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { LOBBY_SYNC_POLL_MS } from '@/constants/timings'
 
@@ -84,6 +84,20 @@ function safePositiveNumber(value, fallback) {
   return parsed
 }
 
+/** Priorise le slot lobby WS (toujours a jour apres JOINED_GAME) puis l etat React lobby. */
+export function resolveLobbyPlayerNumber(lobbyState, wsPlayerNumber) {
+  const wsPlayer = Number(wsPlayerNumber)
+  if (Number.isFinite(wsPlayer) && wsPlayer > 0) return wsPlayer
+  const lobbyPlayer = Number(lobbyState?.playerNumber)
+  if (lobbyState?.inLobby && Number.isFinite(lobbyPlayer) && lobbyPlayer > 0) return lobbyPlayer
+  return 1
+}
+
+function shouldAutoEnterGameFromState(state) {
+  const phase = state?.phase
+  return phase === 'PLACEMENT' || phase === 'BATTLE' || phase === 'GAME_OVER'
+}
+
 export function applyLobbyConfigUpdate(current, message, fallbackPlayerCount) {
   const messageGameId = typeof message?.gameId === 'string' ? message.gameId : null
   if (!messageGameId) return current
@@ -153,6 +167,7 @@ function updateGameplaySync(current, patch) {
  *   refreshStateAction: (player: number, gameId: string | null) => Promise<unknown>,
  *   syncStateAction: (player: number, gameId: string | null) => Promise<unknown>,
  *   enterGameScreenWithState: (state: unknown, status?: string) => void,
+ *   wsPlayerNumber?: number,
  *   onStatus: (message: string) => void,
  * }} params
  */
@@ -163,9 +178,23 @@ export default function useLobbyState({
   refreshStateAction,
   syncStateAction,
   enterGameScreenWithState,
+  wsPlayerNumber = 1,
   onStatus,
 }) {
   const [lobbyState, setLobbyState] = useState(INITIAL_LOBBY_STATE)
+  const lobbyStateRef = useRef(lobbyState)
+  lobbyStateRef.current = lobbyState
+
+  const enterLobbyGameIfReady = useCallback((gameId, playerNumber, status) => {
+    const lobbyScope = gameId ?? null
+    if (!lobbyScope) return Promise.resolve(null)
+    return refreshStateAction(playerNumber, lobbyScope)
+      .then((state) => {
+        if (!shouldAutoEnterGameFromState(state)) return state
+        enterGameScreenWithState(state, status)
+        return state
+      })
+  }, [refreshStateAction, enterGameScreenWithState])
 
   useEffect(() => {
     if (!wsMessage) return
@@ -181,19 +210,14 @@ export default function useLobbyState({
       const shouldEnterGameNow =
         wsMessage.gameStatus === 'IN_PROGRESS' || wsMessage.gameStatus === 'FINISHED'
       if (shouldEnterGameNow) {
-        const lobbyScope = nextLobby.gameId ?? null
-        const playerNumber = nextLobby.playerNumber ?? 1
-        refreshStateAction(playerNumber, lobbyScope)
-          .then((state) => {
-            const status =
-              wsMessage.gameStatus === 'FINISHED'
-                ? (wsMessage.playerResult === 'VICTORY'
-                    ? 'Partie terminee: victoire. Reconnexion en lecture de fin de partie.'
-                    : 'Partie terminee: defaite. Reconnexion en lecture de fin de partie.')
-                : 'Partie en cours. Reconnexion automatique reussie.'
-            enterGameScreenWithState(state, status)
-            return state
-          })
+        const playerNumber = resolveLobbyPlayerNumber(nextLobby, wsMessage.playerNumber ?? wsPlayerNumber)
+        const status =
+          wsMessage.gameStatus === 'FINISHED'
+            ? (wsMessage.playerResult === 'VICTORY'
+                ? 'Partie terminee: victoire. Reconnexion en lecture de fin de partie.'
+                : 'Partie terminee: defaite. Reconnexion en lecture de fin de partie.')
+            : 'Partie en cours. Reconnexion automatique reussie.'
+        enterLobbyGameIfReady(nextLobby.gameId, playerNumber, status)
           .catch(() => {
             onStatus?.('Lobby rejoint, mais impossible de synchroniser l etat de la partie. Reessayez dans quelques secondes.')
           })
@@ -212,14 +236,13 @@ export default function useLobbyState({
       return
     }
     if (wsMessage.type === 'GAME_STARTED') {
-      setLobbyState((current) => {
-        if (current.isHost) return current
+      const current = lobbyStateRef.current
+      if (!current.isHost) {
         const lobbyScope = wsMessage.gameId ?? current.gameId ?? null
-        refreshStateAction(current.playerNumber ?? 1, lobbyScope)
-          .then((state) => enterGameScreenWithState(state, "Partie lancee par l'hote."))
+        const playerNumber = resolveLobbyPlayerNumber(current, wsMessage.playerNumber ?? wsPlayerNumber)
+        enterLobbyGameIfReady(lobbyScope, playerNumber, "Partie lancee par l'hote.")
           .catch(() => onStatus?.("Impossible de charger la partie demarree par l hote."))
-        return current
-      })
+      }
       return
     }
     if (wsMessage.type === 'GAME_STATE_UPDATE') {
@@ -232,7 +255,7 @@ export default function useLobbyState({
         ) {
           return current
         }
-        syncStateAction(current.playerNumber ?? 1, wsMessage.gameId).catch(() => {})
+        syncStateAction(resolveLobbyPlayerNumber(current, wsPlayerNumber), wsMessage.gameId).catch(() => {})
         return current
       })
       return
@@ -240,7 +263,7 @@ export default function useLobbyState({
     if (wsMessage.type === 'TARGET_LOCKED') {
       setLobbyState((current) => {
         if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
-        syncStateAction(current.playerNumber ?? 1, wsMessage.gameId).catch(() => {})
+        syncStateAction(resolveLobbyPlayerNumber(current, wsPlayerNumber), wsMessage.gameId).catch(() => {})
         return updateGameplaySync(current, {
           phaseStep: 'firing',
           shooter: wsMessage.shooter ?? null,
@@ -252,7 +275,7 @@ export default function useLobbyState({
     if (wsMessage.type === 'SHOT_RESOLVED') {
       setLobbyState((current) => {
         if (!current.inLobby || current.gameId !== wsMessage.gameId) return current
-        syncStateAction(current.playerNumber ?? 1, wsMessage.gameId).catch(() => {})
+        syncStateAction(resolveLobbyPlayerNumber(current, wsPlayerNumber), wsMessage.gameId).catch(() => {})
         return updateGameplaySync(current, {
           phaseStep: wsMessage.currentTargetPlayer ? 'firing' : 'target_selection',
           shooter: wsMessage.shooter ?? null,
@@ -322,19 +345,52 @@ export default function useLobbyState({
         setLobbyState(INITIAL_LOBBY_STATE)
       }
     }
-  }, [wsMessage, fallbackPlayerCount, refreshStateAction, syncStateAction, enterGameScreenWithState, screen, onStatus])
+  }, [
+    wsMessage,
+    fallbackPlayerCount,
+    refreshStateAction,
+    syncStateAction,
+    enterGameScreenWithState,
+    enterLobbyGameIfReady,
+    screen,
+    wsPlayerNumber,
+    onStatus,
+  ])
+
+  // Invité en attente sur le menu : detecte le lancement meme si GAME_STARTED est manque.
+  useEffect(() => {
+    if (screen !== 'menu' || !lobbyState.inLobby || lobbyState.isHost) return undefined
+    const gameId = lobbyState.gameId
+    if (!gameId) return undefined
+    const playerNumber = resolveLobbyPlayerNumber(lobbyState, wsPlayerNumber)
+    const poll = () => {
+      enterLobbyGameIfReady(gameId, playerNumber, 'Partie en cours — synchronisation lobby.')
+        .catch(() => {})
+    }
+    poll()
+    const pollId = window.setInterval(poll, LOBBY_SYNC_POLL_MS)
+    return () => window.clearInterval(pollId)
+  }, [
+    screen,
+    lobbyState.inLobby,
+    lobbyState.isHost,
+    lobbyState.gameId,
+    lobbyState.playerNumber,
+    wsPlayerNumber,
+    enterLobbyGameIfReady,
+  ])
 
   // Polling regulier de l'etat backend tant qu'on est dans un lobby et sur
   // l'ecran de jeu (complement des messages WS).
   useEffect(() => {
     if (screen !== 'game' || !lobbyState.inLobby) return undefined
     const lobbyScope = lobbyState.gameId ?? null
-    const playerNumber = lobbyState.playerNumber ?? 1
+    const playerNumber = resolveLobbyPlayerNumber(lobbyState, wsPlayerNumber)
     const pollId = window.setInterval(() => {
       syncStateAction(playerNumber, lobbyScope).catch(() => {})
     }, LOBBY_SYNC_POLL_MS)
     return () => window.clearInterval(pollId)
-  }, [screen, lobbyState.inLobby, lobbyState.gameId, lobbyState.playerNumber, syncStateAction])
+  }, [screen, lobbyState.inLobby, lobbyState.gameId, lobbyState.playerNumber, wsPlayerNumber, syncStateAction])
 
   const resetLobby = useCallback(() => setLobbyState(INITIAL_LOBBY_STATE), [])
 

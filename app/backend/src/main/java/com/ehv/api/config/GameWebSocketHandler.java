@@ -183,7 +183,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         joinedPayload.put("resumeToken", lobbyJwtService.issueToken(game.getGameId(), playerNumber));
         joinedPayload.put("resumed", joinResult.resumedSession());
 
-        String gameStatus = "NOT_STARTED";
+        String gameStatus = game.isGameplayStarted() ? "IN_PROGRESS" : "NOT_STARTED";
         String playerResult = "PENDING";
         GameSession lobbyGame = lobbyGameRegistry.getLobbyIfPresent(game.getGameId());
         if (lobbyGame != null) {
@@ -313,6 +313,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             game.getPlayerCount(),
             game.getMaxPlayers()
         );
+        game.markGameplayStarted();
 
         broadcastToGame(game, Map.of(
             "type", "GAME_STARTED",

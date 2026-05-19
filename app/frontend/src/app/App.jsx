@@ -141,6 +141,7 @@ export default function App() {
     refreshStateAction: api.refreshStateAction,
     syncStateAction: api.syncStateAction,
     enterGameScreenWithState: handleEnterGameScreenWithState,
+    wsPlayerNumber: ws.wsState?.playerNumber ?? 1,
     onStatus: setStatusMessage,
   })
   const { lobbyState } = lobbyApi

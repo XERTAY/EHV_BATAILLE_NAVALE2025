@@ -222,6 +222,7 @@ public class GameSessionManager {
         private final String hostSessionId;
         private final Map<Integer, PlayerSlot> slots = new ConcurrentHashMap<>();
         private volatile long lastActivityAtMs = System.currentTimeMillis();
+        private volatile boolean gameplayStarted = false;
 
         public GameSession(String gameId, int maxPlayers, String hostSessionId) {
             this.gameId = gameId;
@@ -336,6 +337,15 @@ public class GameSessionManager {
 
         public String getGameId() {
             return gameId;
+        }
+
+        public void markGameplayStarted() {
+            gameplayStarted = true;
+            lastActivityAtMs = System.currentTimeMillis();
+        }
+
+        public boolean isGameplayStarted() {
+            return gameplayStarted;
         }
 
         public boolean isHost(WebSocketSession session) {

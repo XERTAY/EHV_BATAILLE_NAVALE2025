@@ -186,7 +186,11 @@ export default function useGameApi() {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await getGameState(player, lobbyGameId)
+      const scopedId = lobbyGameId != null && String(lobbyGameId).trim() !== ''
+        ? String(lobbyGameId).trim()
+        : null
+      if (scopedId) setActiveLobbyGameId(scopedId)
+      const state = await getGameState(player, scopedId)
       applyGameState(setGameState, state)
       return state
     } catch (error) {
@@ -213,7 +217,11 @@ export default function useGameApi() {
   }, [])
 
   const syncStateAction = useCallback(async (player = 1, lobbyGameId = null) => {
-    const state = await getGameState(player, lobbyGameId)
+    const scopedId = lobbyGameId != null && String(lobbyGameId).trim() !== ''
+      ? String(lobbyGameId).trim()
+      : null
+    if (scopedId) setActiveLobbyGameId(scopedId)
+    const state = await getGameState(player, scopedId)
     applyGameState(setGameState, state)
     return state
   }, [])
