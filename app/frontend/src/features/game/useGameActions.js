@@ -45,6 +45,9 @@ export default function useGameActions({
     refreshSaves,
     removeShipAction,
     confirmPlacementAction,
+    activeLobbyGameId,
+    clearActiveLobbyScope,
+    leaveGame,
   } = api
 
   const {
@@ -81,6 +84,8 @@ export default function useGameActions({
   } = placement
 
   const { lobbyState, setLobbyState } = lobby
+  /** Scope HTTP reel (null = partie locale). Evite d envoyer le gameId WS si la partie tourne en local. */
+  const scopedGameId = activeLobbyGameId ?? null
   const {
     battleSubState,
     setBattleSubState,
@@ -97,7 +102,11 @@ export default function useGameActions({
 
     try {
       setStatusMessage('Demarrage de la partie...')
-      if (!keepLobby) setLobbyState(INITIAL_LOBBY_STATE)
+      if (!keepLobby) {
+        setLobbyState(INITIAL_LOBBY_STATE)
+        clearActiveLobbyScope?.()
+        leaveGame?.()
+      }
 
       if (effectiveSetup.startMode === 'load') {
         const loaded = await loadGameAction(effectiveSetup.loadSaveFile)
@@ -126,7 +135,7 @@ export default function useGameActions({
       setScreen('menu')
       setStatusMessage(error?.message ? `Impossible de demarrer: ${error.message}` : 'Impossible de demarrer la partie.')
     }
-  }, [setup, bootstrapGame, loadGameAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage])
+  }, [setup, bootstrapGame, loadGameAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage, clearActiveLobbyScope, leaveGame, setLobbyState])
 
   const handleLoadFromSaveFile = useCallback(async (fileContent) => {
     if (!fileContent?.trim()) {
@@ -136,6 +145,8 @@ export default function useGameActions({
     try {
       setStatusMessage('Chargement du fichier...')
       setLobbyState(INITIAL_LOBBY_STATE)
+      clearActiveLobbyScope?.()
+      leaveGame?.()
       const loaded = await loadGameFromFileAction(fileContent)
       setLayoutSet(loaded?.boards?.length === 4 ? 'star4' : 'faceoff')
       setLocalPlacementWaiting(false)
@@ -146,7 +157,7 @@ export default function useGameActions({
       setScreen('menu')
       setStatusMessage(error?.message ? `Chargement impossible: ${error.message}` : 'Chargement impossible.')
     }
-  }, [loadGameFromFileAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage])
+  }, [loadGameFromFileAction, resetPlacement, setLayoutSet, setLobbyState, setLocalPlacementWaiting, setScreen, setStatusMessage, clearActiveLobbyScope, leaveGame])
 
   const enterGameScreenWithState = useCallback((state, status) => {
     const playerCountFromState = state?.boards?.length === 4 ? 4 : 2
@@ -159,7 +170,7 @@ export default function useGameActions({
 
   const handleSaveCurrentGame = useCallback(async () => {
     try {
-      const lobbyGameId = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+      const lobbyGameId = scopedGameId
       const response = await saveGameAction(setup.saveFileName, lobbyGameId)
       const fileName = response?.fileName ?? `${setup.saveFileName}.save`
       if (response?.content) {
@@ -170,7 +181,7 @@ export default function useGameActions({
     } catch {
       // L'erreur est geree dans le hook API.
     }
-  }, [saveGameAction, setup.saveFileName, refreshSaves, setStatusMessage, lobbyState.inLobby, lobbyState.gameId])
+  }, [saveGameAction, setup.saveFileName, refreshSaves, setStatusMessage, scopedGameId])
 
   const handleBackToMenu = useCallback(() => {
     setLocalPlacementWaiting(false)
@@ -185,7 +196,7 @@ export default function useGameActions({
     }
     if (removalModeEnabled) {
       const removePayload = { player: localPlayerNumber, x, y }
-      if (lobbyState.inLobby && lobbyState.gameId) removePayload.gameId = lobbyState.gameId
+      if (scopedGameId) removePayload.gameId = scopedGameId
       await removeShipAction(removePayload)
       setStatusMessage(`Navire retire depuis ${boardId} ${label}.`)
       return null
@@ -203,7 +214,7 @@ export default function useGameActions({
       y: normalized.y,
       orientation: normalized.orientation,
     }
-    if (lobbyState.inLobby && lobbyState.gameId) placePayload.gameId = lobbyState.gameId
+    if (scopedGameId) placePayload.gameId = scopedGameId
     const result = await placeShipAction(placePayload)
     handlePlacementSuccess(localPlayerNumber, selectedShipType)
     setStatusMessage(buildPlacementOutcomeStatus({ result, boardId, label, selectedShipLabel }))
@@ -224,7 +235,7 @@ export default function useGameActions({
       y,
       targetPlayer: numPlayersInState > 2 ? targetPlayer : undefined,
     }
-    if (lobbyState.inLobby && lobbyState.gameId) firePayload.gameId = lobbyState.gameId
+    if (scopedGameId) firePayload.gameId = scopedGameId
     const result = await fireAtAction(firePayload)
     if (onBattleAction) onBattleAction(result)
     if (numPlayersInState > 2) {
@@ -279,7 +290,7 @@ export default function useGameActions({
     try {
       if (gamePhase === PHASE_PLACEMENT) {
         if (gameState?.phase !== PHASE_PLACEMENT) {
-          const lobbyScope = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+          const lobbyScope = scopedGameId
           setStatusMessage('Mise a jour de la phase de jeu depuis le serveur...')
           try {
             await refreshStateAction(localPlayerNumber, lobbyScope)
@@ -309,7 +320,7 @@ export default function useGameActions({
     }
   }, [
     loading, gameState, interactiveBoards, gamePhase, handleNonInteractiveBoard,
-    lobbyState.inLobby, lobbyState.gameId, refreshStateAction, localPlayerNumber,
+    scopedGameId, refreshStateAction, localPlayerNumber,
     sendPlacement, sendBattle, setStatusMessage, numPlayersInState, battleSubState,
     localPlayerNumber, setBattleSubState, setSelectedTargetBoardId,
   ])
@@ -326,7 +337,7 @@ export default function useGameActions({
     }
     try {
       const payload = { player: localPlayerNumber }
-      if (lobbyState.inLobby && lobbyState.gameId) payload.gameId = lobbyState.gameId
+      if (scopedGameId) payload.gameId = scopedGameId
       const result = await confirmPlacementAction(payload)
       if (result?.state?.phase === PHASE_BATTLE) {
         setLocalPlacementWaiting(false)
@@ -336,7 +347,7 @@ export default function useGameActions({
         setStatusMessage('Placement valide. En attente des autres joueurs...')
       }
       setRemovalModeEnabled(false)
-      const lobbyScope = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+      const lobbyScope = scopedGameId
       try {
         await refreshStateAction(localPlayerNumber, lobbyScope)
       } catch {
@@ -349,7 +360,7 @@ export default function useGameActions({
         setLocalPlacementWaiting(false)
         return
       }
-      const lobbyScope = lobbyState.inLobby && lobbyState.gameId ? lobbyState.gameId : null
+      const lobbyScope = scopedGameId
       try {
         const synced = await refreshStateAction(localPlayerNumber, lobbyScope)
         if (synced?.phase === PHASE_BATTLE) {
@@ -368,7 +379,7 @@ export default function useGameActions({
   }, [
     loading, gameState, gamePhase, localPlacementLocked, remainingShips.length,
     confirmPlacementAction, localPlayerNumber, setLocalPlacementWaiting, setRemovalModeEnabled,
-    lobbyState.inLobby, lobbyState.gameId, refreshStateAction, setStatusMessage,
+    scopedGameId, refreshStateAction, setStatusMessage,
   ])
 
   const handleRemoveSelectedShip = useCallback(async () => {
@@ -379,7 +390,7 @@ export default function useGameActions({
     }
     try {
       const removePayload = { player: localPlayerNumber, shipType: selectedShipType }
-      if (lobbyState.inLobby && lobbyState.gameId) removePayload.gameId = lobbyState.gameId
+      if (scopedGameId) removePayload.gameId = scopedGameId
       await removeShipAction(removePayload)
       setStatusMessage(`Navire ${selectedShipLabel} retire.`)
     } catch {
@@ -388,7 +399,7 @@ export default function useGameActions({
   }, [
     loading, gameState, gamePhase, localPlacementLocked, canRemoveSelectedShip,
     removeShipAction, localPlayerNumber, selectedShipType, selectedShipLabel,
-    lobbyState.inLobby, lobbyState.gameId, setStatusMessage,
+    scopedGameId, setStatusMessage,
   ])
 
   return {

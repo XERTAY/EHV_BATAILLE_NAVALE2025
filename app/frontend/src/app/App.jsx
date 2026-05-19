@@ -254,8 +254,8 @@ export default function App() {
       && selectors.currentIsAi
       && selectors.gamePhase === 'BATTLE',
     runAiStepAction: api.runAiStepAction,
-    lobbyGameId: lobbyState.gameId,
-    lobbyInLobby: lobbyState.inLobby,
+    lobbyGameId: api.activeLobbyGameId,
+    lobbyInLobby: Boolean(api.activeLobbyGameId),
     lobbyIsHost: lobbyState.isHost,
     onStatus: setStatusMessage,
     onAiAction: appendActionFeed,
@@ -267,7 +267,7 @@ export default function App() {
   })
 
   const gameActions = useGameActions({
-    api: { ...api, refreshSaves },
+    api: { ...api, refreshSaves, leaveGame: ws.leaveGame },
     ui: {
       setScreen,
       setLayoutSet,
@@ -312,7 +312,9 @@ export default function App() {
   useEffect(() => {
     const currentUrl = new URL(window.location.href)
     const currentId = currentUrl.searchParams.get('gameId')
-    const normalizedLobbyId = lobbyState?.gameId ? String(lobbyState.gameId).trim().toLowerCase() : ''
+    const normalizedLobbyId = api.activeLobbyGameId
+      ? String(api.activeLobbyGameId).trim().toLowerCase()
+      : ''
     const phaseState =
       screen === 'game'
         ? (selectors.gamePhase === 'GAME_OVER' ? 'finished' : 'active')
@@ -331,7 +333,7 @@ export default function App() {
       currentUrl.searchParams.delete('state')
       window.history.replaceState(null, '', currentUrl)
     }
-  }, [lobbyState?.gameId, screen, selectors.gamePhase])
+  }, [api.activeLobbyGameId, screen, selectors.gamePhase])
 
   useEffect(() => {
     if (screen !== 'menu' || lobbyState?.inLobby || autoJoinTriedRef.current) return

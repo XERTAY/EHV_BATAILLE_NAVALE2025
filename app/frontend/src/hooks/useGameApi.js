@@ -35,6 +35,12 @@ export default function useGameApi() {
   const [gameState, setGameState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  /** Partie HTTP ciblee par les appels API (null = session locale partagee). */
+  const [activeLobbyGameId, setActiveLobbyGameId] = useState(null)
+
+  const clearActiveLobbyScope = useCallback(() => {
+    setActiveLobbyGameId(null)
+  }, [])
 
   const bootstrapGame = useCallback(
     async (
@@ -49,8 +55,12 @@ export default function useGameApi() {
       try {
         setLoading(true)
         setErrorMessage('')
-        await resetGame(boardSize, fleetShipSizes, playerCount, withAI, humanPlayers, lobbyGameId)
-        const state = await getGameState(Math.max(1, Number(viewerPlayer) || 1), lobbyGameId)
+        const scopedId = lobbyGameId != null && String(lobbyGameId).trim() !== ''
+          ? String(lobbyGameId).trim()
+          : null
+        setActiveLobbyGameId(scopedId)
+        await resetGame(boardSize, fleetShipSizes, playerCount, withAI, humanPlayers, scopedId)
+        const state = await getGameState(Math.max(1, Number(viewerPlayer) || 1), scopedId)
         applyGameState(setGameState, state)
         return state
       } catch (error) {
@@ -138,7 +148,11 @@ export default function useGameApi() {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await loadGameFromFile(content, lobbyGameId)
+      const scopedId = lobbyGameId != null && String(lobbyGameId).trim() !== ''
+        ? String(lobbyGameId).trim()
+        : null
+      setActiveLobbyGameId(scopedId)
+      const state = await loadGameFromFile(content, scopedId)
       applyGameState(setGameState, state)
       return state
     } catch (error) {
@@ -153,7 +167,11 @@ export default function useGameApi() {
     try {
       setLoading(true)
       setErrorMessage('')
-      const state = await loadGame(fileName, lobbyGameId)
+      const scopedId = lobbyGameId != null && String(lobbyGameId).trim() !== ''
+        ? String(lobbyGameId).trim()
+        : null
+      setActiveLobbyGameId(scopedId)
+      const state = await loadGame(fileName, scopedId)
       applyGameState(setGameState, state)
       return state
     } catch (error) {
@@ -220,6 +238,8 @@ export default function useGameApi() {
     gameState,
     loading,
     errorMessage,
+    activeLobbyGameId,
+    clearActiveLobbyScope,
     bootstrapGame,
     placeShipAction,
     removeShipAction,
